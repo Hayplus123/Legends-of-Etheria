@@ -1,0 +1,1 @@
+(function(E){'use strict';E.progress.equipment={weaponName:()=>E.state.weaponLevel>1?'Ether-forged blade +'+(E.state.weaponLevel-1):'Forest-forged blade',upgradeCost:()=>75*E.state.weaponLevel};})(window.Etheria=window.Etheria||{});

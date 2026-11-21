@@ -1,0 +1,1 @@
+(function(E){'use strict';E.idle={last:Date.now(),maxOfflineHours:8,collect(){const now=Date.now(),hours=Math.min(this.maxOfflineHours,(now-this.last)/3600000);this.last=now;return Math.floor(hours*3);}};})(window.Etheria=window.Etheria||{});

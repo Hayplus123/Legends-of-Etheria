@@ -1,0 +1,1 @@
+(function(E){'use strict';E.progress.upgradeWeapon=function(){const cost=E.progress.equipment.upgradeCost();if(E.state.gold<cost){E.ui.toast('You need '+cost+' gold.');return;}E.state.gold-=cost;E.state.weaponLevel++;E.ui.toast('Weapon upgraded to level '+E.state.weaponLevel+'.');E.ui.update();E.save.write();};})(window.Etheria=window.Etheria||{});

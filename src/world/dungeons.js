@@ -1,0 +1,1 @@
+(function(E){'use strict';E.dungeons={unlocked:[],isUnlocked(id){return this.unlocked.includes(id);},unlock(id){if(!this.isUnlocked(id))this.unlocked.push(id);}};})(window.Etheria=window.Etheria||{});

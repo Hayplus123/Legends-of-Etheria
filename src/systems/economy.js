@@ -1,0 +1,1 @@
+(function(E){'use strict';E.economy={earnGold(n){E.state.gold=Math.max(0,E.state.gold+n);E.ui.update();},spendGold(n){if(E.state.gold<n)return false;E.state.gold-=n;E.ui.update();return true;}};})(window.Etheria=window.Etheria||{});

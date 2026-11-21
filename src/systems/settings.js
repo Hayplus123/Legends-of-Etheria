@@ -1,0 +1,1 @@
+(function(E){'use strict';E.settings={quality:'high',apply(){const q=document.getElementById('qualityInput').value;this.quality=q;if(E.engine)E.engine.setHardwareScalingLevel(q==='high'?1:q==='medium'?1.25:1.6);E.ui.toast('Graphics quality: '+q+'.');}};})(window.Etheria=window.Etheria||{});

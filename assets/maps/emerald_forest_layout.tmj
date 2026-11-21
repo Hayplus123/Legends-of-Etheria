@@ -1,0 +1,140 @@
+{
+  "compressionlevel": -1,
+  "height": 64,
+  "infinite": false,
+  "nextlayerid": 2,
+  "nextobjectid": 12,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.11.0",
+  "tileheight": 32,
+  "tilewidth": 32,
+  "type": "map",
+  "version": "1.10",
+  "width": 64,
+  "layers": [
+    {
+      "id": 1,
+      "name": "Landmarks and Encounters",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "draworder": "topdown",
+      "objects": [
+        {
+          "id": 1,
+          "name": "Player Spawn",
+          "type": "spawn",
+          "x": 1024,
+          "y": 1792,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 2,
+          "name": "Aurelia Recruit",
+          "type": "npc",
+          "x": 1120,
+          "y": 1504,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 3,
+          "name": "Ether Crystal 1",
+          "type": "resource",
+          "x": 800,
+          "y": 1408,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 4,
+          "name": "Ether Crystal 2",
+          "type": "resource",
+          "x": 1312,
+          "y": 1376,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 5,
+          "name": "Ether Crystal 3",
+          "type": "resource",
+          "x": 704,
+          "y": 768,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 6,
+          "name": "Grove Guardian Arena",
+          "type": "boss_arena",
+          "x": 1024,
+          "y": 320,
+          "width": 480,
+          "height": 320
+        },
+        {
+          "id": 7,
+          "name": "Forest Pool",
+          "type": "landmark",
+          "x": 1504,
+          "y": 1376,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 8,
+          "name": "Old Waygate",
+          "type": "landmark",
+          "x": 1024,
+          "y": 256,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 9,
+          "name": "Wolf Encounter A",
+          "type": "enemy_spawn",
+          "x": 768,
+          "y": 1792,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 10,
+          "name": "Wolf Encounter B",
+          "type": "enemy_spawn",
+          "x": 1088,
+          "y": 1600,
+          "width": 0,
+          "height": 0,
+          "point": true
+        },
+        {
+          "id": 11,
+          "name": "Wolf Encounter C",
+          "type": "enemy_spawn",
+          "x": 1312,
+          "y": 1760,
+          "width": 0,
+          "height": 0,
+          "point": true
+        }
+      ],
+      "x": 0,
+      "y": 0,
+      "color": "#9cb98c"
+    }
+  ],
+  "tilesets": []
+}

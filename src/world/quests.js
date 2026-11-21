@@ -1,0 +1,1 @@
+(function(E){'use strict';E.quests={set(title,detail){E.ui.quest(title,detail);},progress(){return E.state.bossDefeated?100:Math.min(75,E.state.wolfKills*25+(E.state.aurelia?0:0));}};})(window.Etheria=window.Etheria||{});

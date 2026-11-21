@@ -1,0 +1,1 @@
+(function(E){'use strict';E.world.fastTravel=function(region){if(region==='emeraldForest'&&!E.state.bossDefeated){E.ui.toast('Defeat this region’s boss before unlocking fast travel.');return false;}E.ui.toast('Fast travel destination unlocked: '+region);return true;};})(window.Etheria=window.Etheria||{});

@@ -1,0 +1,1 @@
+(function(E){'use strict';E.inventory={items:[],add(id,count=1){const found=this.items.find(x=>x.id===id);if(found)found.count+=count;else this.items.push({id,count});}};})(window.Etheria=window.Etheria||{});
