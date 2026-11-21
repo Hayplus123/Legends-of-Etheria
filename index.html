@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101a1b" />
+    <title>Legends of Etheria — Prototype</title>
+  </head>
+  <body>
+    <div id="game-shell">
+      <canvas id="game-canvas" aria-label="Legends of Etheria 3D game"></canvas>
+
+      <div id="hud">
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark">✦</span>
+            <div>
+              <div class="brand-name">LEGENDS OF ETHERIA</div>
+              <div class="brand-subtitle">EMERALD FOREST · PROTOTYPE</div>
+            </div>
+          </div>
+          <div class="top-actions">
+            <span id="world-clock">MORNING</span>
+            <button id="save-button" class="small-button">Save</button>
+            <button id="pause-button" class="small-button">Ⅱ</button>
+          </div>
+        </header>
+
+        <section class="status-panel">
+          <div class="hero-line"><span class="hero-name">WAYFARER</span><span id="level-label">LV 1</span></div>
+          <div class="stat-row"><span>HEALTH</span><span id="hp-value">100 / 100</span></div>
+          <div class="meter"><div id="hp-bar" class="meter-fill health"></div></div>
+          <div class="stat-row"><span>MANA</span><span id="mana-value">60 / 60</span></div>
+          <div class="meter"><div id="mana-bar" class="meter-fill mana"></div></div>
+          <div class="stat-row"><span>EXPERIENCE</span><span id="xp-value">0 / 100</span></div>
+          <div class="meter"><div id="xp-bar" class="meter-fill experience"></div></div>
+        </section>
+
+        <section class="objective-panel">
+          <div class="eyebrow">CURRENT OBJECTIVE</div>
+          <div id="objective-title">A quiet forest… for now.</div>
+          <div id="objective-detail">Explore the clearing and meet the wandering guardian.</div>
+        </section>
+
+        <div id="interaction-prompt" class="interaction-prompt hidden">E · Interact</div>
+        <div id="toast" class="toast"></div>
+
+        <footer class="bottom-hud">
+          <div class="control-hint"><kbd>W A S D</kbd> Move <span>·</span> <kbd>Mouse</kbd> Look <span>·</span> <kbd>Space</kbd> Attack <span>·</span> <kbd>E</kbd> Interact</div>
+          <div class="bottom-right"><span id="companion-status">COMPANION: NONE</span><span id="enemy-status">FOREST WOLF: CALM</span></div>
+        </footer>
+      </div>
+
+      <div id="pause-overlay" class="overlay hidden">
+        <div class="modal">
+          <div class="eyebrow">LEGENDS OF ETHERIA</div>
+          <h1>Paused</h1>
+          <p>The forest can wait.</p>
+          <button id="resume-button" class="primary-button">Resume adventure</button>
+          <button id="reset-button" class="text-button">Reset prototype save</button>
+        </div>
+      </div>
+
+      <div id="start-overlay" class="overlay">
+        <div class="modal intro-modal">
+          <div class="eyebrow">A NEW ADVENTURE BEGINS</div>
+          <h1>Emerald Forest</h1>
+          <p class="intro-copy">Beyond the old stone path, emerald light stirs beneath the trees. Your journey into Etheria begins here.</p>
+          <div class="intro-controls">
+            <span><kbd>W A S D</kbd> Move</span>
+            <span><kbd>Mouse</kbd> Rotate camera</span>
+            <span><kbd>Space</kbd> Attack</span>
+            <span><kbd>E</kbd> Interact</span>
+          </div>
+          <button id="start-button" class="primary-button">Enter the forest</button>
+          <p class="small-note">Prototype build 0.1 · Progress saves in this browser</p>
+        </div>
+      </div>
+
+      <div id="level-up" class="level-up hidden">
+        <div class="eyebrow">YOUR JOURNEY CONTINUES</div>
+        <strong>LEVEL UP!</strong>
+        <span id="level-up-label">Level 2</span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
