@@ -140,7 +140,15 @@ const materials = {
     leafBright: mat('leaf highlights', new Color3(0.28, 0.46, 0.23)),
     fern: mat('fern fronds', new Color3(0.12, 0.32, 0.16)),
     flower: mat('wildflower petals', new Color3(0.88, 0.72, 0.44), new Color3(0.12, 0.07, 0.02)),
-    water: mat('forest pool water', new Color3(0.11, 0.34, 0.34), new Color3(0.02, 0.11, 0.13), 0.82)
+    water: mat('forest pool water', new Color3(0.11, 0.34, 0.34), new Color3(0.02, 0.11, 0.13), 0.82),
+    emberGround: mat('Emberfall volcanic earth', new Color3(0.28, 0.12, 0.09)),
+    emberGlow: mat('Emberfall molten seams', new Color3(0.95, 0.27, 0.07), new Color3(0.85, 0.12, 0.015)),
+    frostGround: mat('Frostveil snowfield', new Color3(0.61, 0.76, 0.81), new Color3(0.07, 0.13, 0.18)),
+    frostCrystal: mat('Frostveil blue ice', new Color3(0.38, 0.76, 0.9), new Color3(0.18, 0.46, 0.68)),
+    mireGround: mat('Sunken Mire peat', new Color3(0.12, 0.23, 0.17)),
+    mireGlow: mat('Sunken Mire toxic lights', new Color3(0.34, 0.69, 0.28), new Color3(0.13, 0.32, 0.08)),
+    starGround: mat('Starfall golden sand', new Color3(0.56, 0.43, 0.25)),
+    starCrystal: mat('Starfall sunstone', new Color3(0.9, 0.68, 0.27), new Color3(0.46, 0.24, 0.04))
 };
 const grassTexture = makeSurfaceTexture('moss-texture', 'grass', '#29492e');
 const barkTexture = makeSurfaceTexture('bark-texture', 'bark', '#5b3d27');
@@ -767,6 +775,53 @@ function makeInteractableMarker(position, color) {
 // The forest is the next physical area north of camp. These offsets move its environment,
 // lights and ambient particles as one continuous location, while leaving the headquarters in place.
 const FOREST_OFFSET = new Vector3(80, 0, 35);
+// The world remains one continuous map. The four new regions sit on the four routes
+// leading out from the Emerald Forest and the southern road from headquarters.
+const REGION_DATA = {
+    forest: {
+        id: 'forest', name: 'Emerald Forest', bossName: 'Grove Guardian', enemyName: 'Forest Wolf',
+        center: new Vector3(80, 0, 32), bounds: { minX: 42, maxX: 118, minZ: 2, maxZ: 62 },
+        bossPosition: new Vector3(80, 0, 11), cagePosition: new Vector3(80, 4.8, 4.5),
+        entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.enemy, bossMaterial: materials.bark,
+        crystalMaterial: materials.crystal, companionId: 'aurelia', rewardGold: 250, rewardXP: 300,
+        mobPositions: [new Vector3(-5, 0, 8), new Vector3(0, 0, 3), new Vector3(6, 0, -3)]
+    },
+    emberfall: {
+        id: 'emberfall', name: 'Emberfall Highlands', bossName: 'The Cinderheart Colossus', enemyName: 'Ashfang',
+        center: new Vector3(80, 0, -42), bounds: { minX: 42, maxX: 118, minZ: -80, maxZ: -4 },
+        bossPosition: new Vector3(80, 0, -61), cagePosition: new Vector3(80, 4.8, -68),
+        entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.emberGlow, bossMaterial: materials.emberGround,
+        crystalMaterial: materials.emberGlow, companionId: 'darian', rewardGold: 360, rewardXP: 440,
+        mobPositions: [new Vector3(66, 0, -37), new Vector3(80, 0, -31), new Vector3(94, 0, -38)]
+    },
+    frostveil: {
+        id: 'frostveil', name: 'Frostveil Tundra', bossName: 'The Pale Glacier Wyrm', enemyName: 'Rime Stalker',
+        center: new Vector3(160, 0, 32), bounds: { minX: 122, maxX: 198, minZ: -6, maxZ: 70 },
+        bossPosition: new Vector3(180, 0, 32), cagePosition: new Vector3(187, 4.8, 32),
+        entryDirection: new Vector3(-1, 0, 0), enemyMaterial: materials.frostCrystal, bossMaterial: materials.frostGround,
+        crystalMaterial: materials.frostCrystal, companionId: 'nyra', rewardGold: 420, rewardXP: 520,
+        mobPositions: [new Vector3(151, 0, 18), new Vector3(158, 0, 32), new Vector3(151, 0, 46)]
+    },
+    mire: {
+        id: 'mire', name: 'Sunken Mire', bossName: 'The Hollowfen Behemoth', enemyName: 'Mirebound',
+        center: new Vector3(0, 0, 32), bounds: { minX: -38, maxX: 38, minZ: -6, maxZ: 70 },
+        bossPosition: new Vector3(-20, 0, 32), cagePosition: new Vector3(-27, 4.8, 32),
+        entryDirection: new Vector3(1, 0, 0), enemyMaterial: materials.mireGlow, bossMaterial: materials.mireGround,
+        crystalMaterial: materials.mireGlow, companionId: 'rowan', rewardGold: 480, rewardXP: 600,
+        mobPositions: [new Vector3(29, 0, 18), new Vector3(22, 0, 32), new Vector3(29, 0, 46)]
+    },
+    starfall: {
+        id: 'starfall', name: 'Starfall Expanse', bossName: 'The Sunken Star Sentinel', enemyName: 'Dune Wraith',
+        center: new Vector3(80, 0, 170), bounds: { minX: 42, maxX: 118, minZ: 132, maxZ: 208 },
+        bossPosition: new Vector3(80, 0, 190), cagePosition: new Vector3(80, 4.8, 197),
+        entryDirection: new Vector3(0, 0, -1), enemyMaterial: materials.starCrystal, bossMaterial: materials.starGround,
+        crystalMaterial: materials.starCrystal, companionId: 'seren', rewardGold: 560, rewardXP: 700,
+        mobPositions: [new Vector3(66, 0, 157), new Vector3(80, 0, 163), new Vector3(94, 0, 157)]
+    }
+};
+function freshRegionProgress() {
+    return Object.fromEntries(Object.keys(REGION_DATA).map(id => [id, { kills: 0, bossUnlocked: false, bossDefeated: false, rescued: false }]));
+}
 const forestMeshStart = scene.meshes.length;
 const forestTransformStart = scene.transformNodes.length;
 const forestLightStart = scene.lights.length;
@@ -884,6 +939,93 @@ for (let i = 0; i < 22; i++) {
     const r = 5.4 + Math.sin(i * 7) * 0.25;
     makeRock(18 + Math.cos(a) * r * 1.2, 5 + Math.sin(a) * r * 0.78, 0.24 + (i % 3) * 0.12);
 }
+
+function makeWorldRoad(from, to, width = 5.2) {
+    const dx = to.x - from.x, dz = to.z - from.z;
+    const length = Math.hypot(dx, dz);
+    const road = MeshBuilder.CreateGround('connecting regional stone road', { width, height: length + 3, subdivisions: 2 }, scene);
+    road.position.set((from.x + to.x) / 2, 0.04, (from.z + to.z) / 2);
+    road.rotation.y = Math.atan2(dx, dz);
+    road.material = materials.path;
+    road.receiveShadows = true;
+    road.isPickable = false;
+    return road;
+}
+
+function buildAdditionalRegions() {
+    const configs = [REGION_DATA.emberfall, REGION_DATA.frostveil, REGION_DATA.mire, REGION_DATA.starfall];
+    for (const region of configs) {
+        const ground = MeshBuilder.CreateGround(`${region.name} terrain`, { width: 76, height: 76, subdivisions: 4 }, scene);
+        ground.position.copyFrom(region.center);
+        ground.position.y = 0.012;
+        ground.material = region.id === 'emberfall' ? materials.emberGround : region.id === 'frostveil' ? materials.frostGround : region.id === 'mire' ? materials.mireGround : materials.starGround;
+        ground.receiveShadows = true;
+        const path = MeshBuilder.CreateGround(`${region.name} inner trail`, { width: 5.2, height: 55, subdivisions: 2 }, scene);
+        path.position.copyFrom(region.center);
+        path.position.y = 0.045;
+        path.rotation.y = region.id === 'frostveil' ? Math.PI / 2 : region.id === 'mire' ? Math.PI / 2 : 0;
+        path.material = region.id === 'frostveil' ? materials.frostCrystal : region.id === 'starfall' ? materials.paleStone : materials.path;
+        path.receiveShadows = true;
+
+        for (let i = 0; i < 22; i++) {
+            const a = i * 2.399;
+            const r = 17 + (i % 5) * 2.4;
+            const x = region.center.x + Math.cos(a) * r;
+            const z = region.center.z + Math.sin(a) * r;
+            if (region.id === 'emberfall') {
+                const basalt = MeshBuilder.CreatePolyhedron('Emberfall basalt spire', { type: 1, size: 1.25 + (i % 4) * 0.35 }, scene);
+                basalt.position.set(x, 0.9 + (i % 3) * 0.35, z);
+                basalt.scaling.set(0.9, 1.7 + (i % 3) * 0.35, 0.95);
+                basalt.material = materials.bark;
+                if (i % 4 === 0) {
+                    const lava = MeshBuilder.CreateTorus('glowing lava vent', { diameter: 1.35, thickness: 0.09, tessellation: 20 }, scene);
+                    lava.position.set(x, 0.12, z);
+                    lava.rotation.x = Math.PI / 2;
+                    lava.material = materials.emberGlow;
+                }
+            } else if (region.id === 'frostveil') {
+                const pine = MeshBuilder.CreateCylinder('Frostveil ice pine', { height: 4.2 + (i % 3) * 0.7, diameterTop: 0, diameterBottom: 2.0, tessellation: 6 }, scene);
+                pine.position.set(x, 2.1 + (i % 3) * 0.35, z);
+                pine.material = materials.frostCrystal;
+                const ice = MeshBuilder.CreatePolyhedron('blue ice outcrop', { type: 1, size: 0.7 + (i % 3) * 0.2 }, scene);
+                ice.position.set(x + 1.3, 0.85, z - 0.8);
+                ice.scaling.set(0.55, 1.65, 0.6);
+                ice.material = materials.frostCrystal;
+            } else if (region.id === 'mire') {
+                const stump = MeshBuilder.CreateCylinder('Sunken Mire ancient stump', { height: 3.6 + (i % 3) * 0.45, diameterTop: 0.45, diameterBottom: 1.1, tessellation: 8 }, scene);
+                stump.position.set(x, 1.8, z);
+                stump.rotation.z = Math.sin(a) * 0.14;
+                stump.material = materials.bark;
+                const bogLight = MeshBuilder.CreateSphere('mire will-o-wisp', { diameter: 0.24, segments: 8 }, scene);
+                bogLight.position.set(x + 1.1, 1.2 + (i % 3) * 0.25, z + 0.7);
+                bogLight.material = materials.mireGlow;
+                glowLayer.addIncludedOnlyMesh(bogLight);
+            } else {
+                const dune = MeshBuilder.CreatePolyhedron('Starfall sandstone ruin', { type: 1, size: 1.1 + (i % 3) * 0.3 }, scene);
+                dune.position.set(x, 0.8, z);
+                dune.scaling.set(1.0, 1.6, 0.8);
+                dune.material = materials.paleStone;
+                if (i % 3 === 0) {
+                    const obelisk = MeshBuilder.CreateCylinder('Starfall fallen obelisk', { height: 4.8, diameterTop: 0.12, diameterBottom: 0.85, tessellation: 4 }, scene);
+                    obelisk.position.set(x + 1.5, 2.2, z - 1.1);
+                    obelisk.rotation.z = 0.12;
+                    obelisk.material = materials.starCrystal;
+                }
+            }
+        }
+        // A recognisable landmark marks the entrance to each region.
+        const archMat = region.id === 'emberfall' ? materials.emberGlow : region.id === 'frostveil' ? materials.frostCrystal : region.id === 'mire' ? materials.mireGlow : materials.starCrystal;
+        for (const side of [-1, 1]) {
+            const pillar = MeshBuilder.CreateBox(`${region.name} entrance marker`, { width: 0.65, height: 4.2, depth: 0.7 }, scene);
+            pillar.position.set(region.center.x + (region.id === 'frostveil' || region.id === 'mire' ? 0 : side * 3.3), 2.1, region.center.z + (region.id === 'frostveil' || region.id === 'mire' ? side * 3.3 : 25));
+            pillar.material = archMat;
+        }
+    }
+    makeWorldRoad(new Vector3(80, 0, 3), new Vector3(80, 0, -4));
+    makeWorldRoad(new Vector3(117, 0, 32), new Vector3(123, 0, 32));
+    makeWorldRoad(new Vector3(43, 0, 32), new Vector3(37, 0, 32));
+    makeWorldRoad(new Vector3(80, 0, 104), new Vector3(80, 0, 133));
+}
 // The ancient grove gate frames the final encounter beyond the old path.
 for (const side of [-1, 1]) {
     const pillar = MeshBuilder.CreateBox('ancient grove gate pillar', { width: 1.0, height: 5.4, depth: 1.1 }, scene);
@@ -932,6 +1074,8 @@ for (const mote of fireflies) {
     mote.x += FOREST_OFFSET.x;
     mote.z += FOREST_OFFSET.z;
 }
+// Build the other four regions after the forest-only offset pass so their world coordinates stay exact.
+buildAdditionalRegions();
 // Home base: a small but explorable headquarters with distinct places to use.
 const baseCenter = new Vector3(80, 0, 80);
 const baseGround = MeshBuilder.CreateGround('headquarters grounds', { width: 48, height: 48, subdivisions: 2 }, scene);
@@ -1041,6 +1185,13 @@ sylva.root.position.set(82, 0, 72);
 const aureliaModel = makeCharacter('Aurelia', mat('Aurelia healer robes', new Color3(0.42, 0.49, 0.34)), materials.crystal, 1, 'healer');
 aureliaModel.root.position.set(3.5 + FOREST_OFFSET.x, 0, -3.8 + FOREST_OFFSET.z);
 aureliaModel.root.setEnabled(false);
+// Additional rescue characters are placeholders until their exact roles and abilities
+// are planned with the player. Their recruitment is always gated behind their region boss.
+const darianModel = makeCharacter('Darian', mat('Darian emberguard armour', new Color3(0.52, 0.23, 0.15)), materials.emberGlow, 1.04, 'warrior');
+const nyraModel = makeCharacter('Nyra', mat('Nyra frostweave robes', new Color3(0.38, 0.57, 0.69)), materials.frostCrystal, 1, 'mage');
+const rowanModel = makeCharacter('Rowan', mat('Rowan mire scout cloak', new Color3(0.22, 0.34, 0.22)), materials.mireGlow, 1, 'ranger');
+const serenModel = makeCharacter('Seren', mat('Seren starfall robes', new Color3(0.57, 0.43, 0.24)), materials.starCrystal, 1, 'healer');
+[darianModel, nyraModel, rowanModel, serenModel].forEach(model => model.root.setEnabled(false));
 const guardianNPC = makeCharacter('Forest Guardian', mat('forest guardian cloak', new Color3(0.42, 0.48, 0.30)), materials.crystal, 1.02, 'mage');
 guardianNPC.root.position.set(4.5 + FOREST_OFFSET.x, 0, -3.5 + FOREST_OFFSET.z);
 const guardianStaffCrystal = MeshBuilder.CreateSphere('guardian staff crystal', { diameter: 0.35, segments: 8 }, scene);
@@ -1052,10 +1203,16 @@ guardianMarker.parent = guardianNPC.root;
 guardianMarker.position.y = 2.75;
 guardianMarker.rotation.x = Math.PI / 2;
 guardianMarker.material = materials.gold;
+guardianNPC.root.setEnabled(false);
+guardianMarker.setEnabled(false);
 const companions = [
     { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
     { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 95, maxHp: 95, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 }
+    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 95, maxHp: 95, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
+    { id: 'darian', name: 'Darian', role: 'Warrior', model: darianModel, active: false, recruited: false, hp: 125, maxHp: 125, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
+    { id: 'nyra', name: 'Nyra', role: 'Mage', model: nyraModel, active: false, recruited: false, hp: 88, maxHp: 88, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
+    { id: 'rowan', name: 'Rowan', role: 'Ranger', model: rowanModel, active: false, recruited: false, hp: 100, maxHp: 100, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
+    { id: 'seren', name: 'Seren', role: 'Healer', model: serenModel, active: false, recruited: false, hp: 105, maxHp: 105, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 }
 ];
 for (const companion of companions) companion.model.root.metadata = { ...(companion.model.root.metadata || {}), companionId: companion.id };
 let selectedCompanion = null;
@@ -1067,6 +1224,7 @@ const state = {
     worldMinutes: 9 * 60, weatherIndex: 0, combatTimer: 0, attackCooldown: 0, defend: false,
     defaultAbility: 'arcane', abilityCooldowns: { arcane: 0, heal: 0, nova: 0 },
     crystalsCollected: new Set(), questComplete: false, nightSpawned: false, randomEventTimer: 0,
+    regionProgress: freshRegionProgress(), cutsceneActive: false,
     playerDamageFlash: 0, stepTime: 0, protectionTimer: 0, lastSaveTime: 0
 };
 const weatherNames = ['CLEAR', 'RAIN', 'MIST'];
@@ -1083,6 +1241,303 @@ let interactables = [];
 let projectiles = [];
 let enemyId = 0;
 const keys = new Set();
+const prisonerCages = {};
+let activeRescueCutscene = null;
+let rescueCutsceneOverlay = null;
+const companionById = Object.fromEntries(companions.map(companion => [companion.id, companion]));
+
+function ensureRescueOverlay() {
+    if (rescueCutsceneOverlay) return rescueCutsceneOverlay;
+    const style = document.createElement('style');
+    style.textContent = `#rescue-cutscene-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:flex-end;justify-content:center;padding:28px;box-sizing:border-box;background:linear-gradient(180deg,rgba(5,12,15,.02) 35%,rgba(3,8,11,.72));color:#f3f1df;font-family:Georgia,serif;text-align:center;cursor:pointer;user-select:none}#rescue-cutscene-overlay .rescue-caption{max-width:760px;padding:16px 24px;border:1px solid rgba(214,231,220,.28);border-radius:14px;background:rgba(8,19,18,.72);backdrop-filter:blur(8px);box-shadow:0 10px 36px rgba(0,0,0,.24)}#rescue-cutscene-overlay h2{margin:0 0 8px;font-size:clamp(22px,3vw,34px);letter-spacing:.04em}#rescue-cutscene-overlay p{margin:0 0 8px;color:#d5e2da;font:14px/1.5 system-ui,sans-serif}#rescue-cutscene-overlay small{color:#d7c999;font:11px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase}`;
+    document.head.appendChild(style);
+    rescueCutsceneOverlay = document.createElement('div');
+    rescueCutsceneOverlay.id = 'rescue-cutscene-overlay';
+    rescueCutsceneOverlay.innerHTML = '<div class="rescue-caption"><h2></h2><p></p><small>Click anywhere to skip</small></div>';
+    rescueCutsceneOverlay.addEventListener('pointerdown', event => { event.preventDefault(); event.stopPropagation(); finishRescueCutscene(true); });
+    document.body.appendChild(rescueCutsceneOverlay);
+    return rescueCutsceneOverlay;
+}
+
+function createPrisonCrystal(regionId) {
+    const region = REGION_DATA[regionId];
+    const companion = companionById[region.companionId];
+    if (!region || !companion) return null;
+    const root = new TransformNode(`${regionId} floating rescue crystal`, scene);
+    root.position.copyFrom(region.cagePosition);
+    const crystalMaterial = new StandardMaterial(`${regionId} prison crystal material`, scene);
+    crystalMaterial.diffuseColor = region.crystalMaterial.diffuseColor.clone();
+    crystalMaterial.emissiveColor = region.crystalMaterial.emissiveColor.clone();
+    crystalMaterial.alpha = 0.34;
+    crystalMaterial.specularColor = new Color3(0.9, 0.98, 1);
+    crystalMaterial.specularPower = 110;
+    const crystal = MeshBuilder.CreatePolyhedron(`${regionId} sealed prisoner crystal`, { type: 1, size: 1.45 }, scene);
+    crystal.parent = root;
+    crystal.position.y = 0.1;
+    crystal.scaling.set(1.25, 2.35, 1.15);
+    crystal.material = crystalMaterial;
+    glowLayer.addIncludedOnlyMesh(crystal);
+    const ring = MeshBuilder.CreateTorus(`${regionId} prison seal ring`, { diameter: 2.65, thickness: 0.07, tessellation: 32 }, scene);
+    ring.parent = root;
+    ring.position.y = -1.85;
+    ring.rotation.x = Math.PI / 2;
+    ring.material = region.crystalMaterial;
+    const halo = MeshBuilder.CreateTorus(`${regionId} prison halo`, { diameter: 2.25, thickness: 0.055, tessellation: 32 }, scene);
+    halo.parent = root;
+    halo.position.y = 1.6;
+    halo.rotation.x = Math.PI / 2;
+    halo.material = region.crystalMaterial;
+    const rune = MeshBuilder.CreatePolyhedron(`${regionId} prison rune`, { type: 1, size: 0.34 }, scene);
+    rune.parent = root;
+    rune.position.y = 2.55;
+    rune.material = region.crystalMaterial;
+    const crackPaths = [
+        [new Vector3(-0.1,-1.75,1.02),new Vector3(0.12,-1.15,1.1),new Vector3(-0.02,-0.55,1.17),new Vector3(0.22,0.05,1.17),new Vector3(0.04,0.65,1.12),new Vector3(0.22,1.48,0.88)],
+        [new Vector3(-0.02,-0.55,1.17),new Vector3(-0.55,-0.25,1.03),new Vector3(-0.82,0.15,0.9)],
+        [new Vector3(0.22,0.05,1.17),new Vector3(0.68,0.35,1.02),new Vector3(0.82,0.82,0.86)],
+        [new Vector3(0.04,0.65,1.12),new Vector3(-0.38,0.98,0.99),new Vector3(-0.48,1.38,0.86)]
+    ];
+    const cracks = crackPaths.map((points, index) => {
+        const line = MeshBuilder.CreateLines(`${regionId} crystal fracture ${index}`, { points }, scene);
+        line.parent = root;
+        line.color = new Color3(0.92, 0.99, 1);
+        line.isPickable = false;
+        line.setEnabled(false);
+        return line;
+    });
+    companion.model.root.position.set(region.cagePosition.x, region.cagePosition.y - 1.35, region.cagePosition.z);
+    companion.model.root.rotation.y = Math.atan2(region.entryDirection.x, region.entryDirection.z);
+    companion.model.root.setEnabled(true);
+    return { regionId, root, crystal, ring, halo, rune, cracks, companion, material: crystalMaterial, shards: [], opened: false };
+}
+
+function createAllPrisonCrystals() {
+    for (const regionId of Object.keys(REGION_DATA)) prisonerCages[regionId] = createPrisonCrystal(regionId);
+    updatePrisonCrystalVisibility();
+}
+
+function updatePrisonCrystalVisibility() {
+    for (const [regionId, prison] of Object.entries(prisonerCages)) {
+        const progress = state.regionProgress[regionId];
+        const locked = !progress?.rescued;
+        if (locked) {
+            // Re-enable an intact prison when loading an older save or starting a fresh run.
+            prison.opened = false;
+            prison.crystal.setEnabled(true);
+            prison.ring.setEnabled(true);
+            prison.halo.setEnabled(true);
+            prison.rune.setEnabled(true);
+            prison.cracks.forEach(line => line.setEnabled(false));
+            prison.root.setEnabled(true);
+            prison.companion.model.root.position.set(prison.root.position.x, prison.root.position.y - 1.35, prison.root.position.z);
+            prison.companion.model.root.setEnabled(true);
+        } else {
+            prison.root.setEnabled(false);
+            prison.companion.model.root.setEnabled(!!prison.companion.active);
+        }
+    }
+}
+
+function setRescueCaption(regionId, title, text) {
+    const overlay = ensureRescueOverlay();
+    overlay.querySelector('h2').textContent = title;
+    overlay.querySelector('p').textContent = text;
+    overlay.style.display = 'flex';
+}
+
+function finishRescueCutscene(skipped = false) {
+    const cutscene = activeRescueCutscene;
+    if (!cutscene) return;
+    activeRescueCutscene = null;
+    const { regionId, prison, cameraSnapshot, previousPaused } = cutscene;
+    if (cutscene.frameHandle) cancelAnimationFrame(cutscene.frameHandle);
+    if (cutscene.hand && !cutscene.hand.isDisposed()) cutscene.hand.dispose();
+    for (const shard of prison.shards || []) if (shard && !shard.isDisposed()) shard.dispose();
+    prison.shards = [];
+    prison.root.setEnabled(false);
+    prison.opened = true;
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    const companion = prison.companion;
+    progress.rescued = true;
+    companion.recruited = true;
+    companion.recovering = false;
+    companion.hp = companion.maxHp;
+    if (regionId === 'forest') state.aureliaRecruited = true;
+    // The first rescue joins automatically. Later recruits become available in the planning table.
+    companion.active = regionId === 'forest' || activeCompanions().length < 3;
+    companion.model.root.setEnabled(companion.active);
+    if (companion.active) {
+        companion.model.root.position.copyFrom(player.root.position.add(new Vector3(2 + (activeCompanions().length % 2), 0, 1.5)));
+    }
+    camera.alpha = cameraSnapshot.alpha;
+    camera.beta = cameraSnapshot.beta;
+    camera.radius = cameraSnapshot.radius;
+    camera.target.copyFrom(player.root.position.add(new Vector3(0, 1.2, 0)));
+    camera.inertia = cameraSnapshot.inertia;
+    if (cutscene.heroRotation !== undefined) player.root.rotation.y = cutscene.heroRotation;
+    if (cutscene.heroOriginalY !== undefined) player.root.position.y = cutscene.heroOriginalY;
+    if (player.arms && cutscene.armRotations) player.arms.forEach((arm, index) => arm.rotation.copyFrom(cutscene.armRotations[index]));
+    camera.attachControl(canvas, true);
+    if (camera.inputs.attached.pointers) camera.inputs.attached.pointers.buttons = [0, 1];
+    if (rescueCutsceneOverlay) rescueCutsceneOverlay.style.display = 'none';
+    state.cutsceneActive = false;
+    state.paused = previousPaused;
+    state.defend = false;
+    keys.clear();
+    nearby = null;
+    updatePrisonCrystalVisibility();
+    updateZoneFromPosition();
+    updateHUD();
+    if (regionId === 'starfall') {
+        setObjective('A horizon beyond the stars', `${companion.name} is free, but the ancient seals point toward lands beyond Starfall. The journey is far from over.`);
+    } else {
+        setObjective(`${companion.name} rescued`, `${companion.name} has been freed from the ${region.name} crystal prison. You can manage the new companion at the planning table.`);
+    }
+    showToast(`${companion.name} has been rescued and unlocked!`, 4.2);
+    void saveGame(true);
+}
+
+function createPrisonShards(prison) {
+    const center = prison.root.getAbsolutePosition();
+    for (let i = 0; i < 10; i++) {
+        const shard = MeshBuilder.CreatePolyhedron('shattered rescue crystal fragment', { type: 1, size: 0.24 + (i % 3) * 0.08 }, scene);
+        shard.position.set(center.x + (Math.random() - 0.5) * 1.6, center.y + (Math.random() - 0.5) * 2.5, center.z + (Math.random() - 0.5) * 1.2);
+        shard.material = prison.material;
+        shard.isPickable = false;
+        prison.shards.push(shard);
+    }
+    prison.crystal.setEnabled(false);
+    prison.ring.setEnabled(false);
+    prison.halo.setEnabled(false);
+    prison.rune.setEnabled(false);
+}
+
+function beginRescueCutscene(regionId) {
+    if (activeRescueCutscene) return;
+    const region = REGION_DATA[regionId];
+    const prison = prisonerCages[regionId];
+    if (!region || !prison || prison.opened) {
+        finishRegionBossProgress(regionId);
+        return;
+    }
+    const cameraSnapshot = { alpha: camera.alpha, beta: camera.beta, radius: camera.radius, target: camera.target.clone(), inertia: camera.inertia };
+    const previousPaused = state.paused;
+    const walkStart = player.root.position.clone();
+    const walkStartRotation = player.root.rotation.y;
+    const heroRotation = player.root.rotation.y;
+    const heroOriginalY = player.root.position.y;
+    const armRotations = player.arms ? player.arms.map(arm => arm.rotation.clone()) : [];
+    const stand = prison.root.position.add(region.entryDirection.scale(2.6));
+    stand.y = 0;
+    const facing = prison.root.position.subtract(stand);
+    facing.y = 0;
+    const desiredRotation = Math.atan2(facing.x, facing.z);
+    camera.detachControl();
+    state.paused = true;
+    state.cutsceneActive = true;
+    state.defend = false;
+    keys.clear();
+    setRescueCaption(regionId, `${companionById[region.companionId].name} is still trapped`, 'The crystal prison hums with ancient magic.');
+    const hand = MeshBuilder.CreateSphere('rescue magic gathered in hero hand', { diameter: 0.24, segments: 12 }, scene);
+    hand.material = region.crystalMaterial;
+    hand.isPickable = false;
+    activeRescueCutscene = { regionId, prison, cameraSnapshot, previousPaused, walkStart, walkStartRotation, heroRotation, armRotations, heroOriginalY, stand, desiredRotation, startTime: performance.now(), hand, shardsCreated: false, frameHandle: 0 };
+    const lerpAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
+    const tick = now => {
+        const c = activeRescueCutscene;
+        if (!c) return;
+        const elapsed = now - c.startTime;
+        const walkT = Math.min(1, elapsed / 1600);
+        const smoothWalk = walkT * walkT * (3 - 2 * walkT);
+        player.root.position.copyFrom(Vector3.Lerp(c.walkStart, c.stand, smoothWalk));
+        if (elapsed >= 1600) {
+            const lift = Math.min(1, (elapsed - 1600) / 700);
+            player.root.position.y = c.heroOriginalY + 2.6 * (lift * lift * (3 - 2 * lift));
+        }
+        player.root.rotation.y = lerpAngle(c.walkStartRotation, c.desiredRotation, smoothWalk);
+        animateCharacterMovement(player, elapsed < 1500, elapsed / 1000);
+        player.root.computeWorldMatrix(true);
+        const handWorld = Vector3.TransformCoordinates(new Vector3(0.55, 0.68, 0.96), player.root.getWorldMatrix());
+        c.hand.position.copyFrom(handWorld);
+        const cameraTargetWalk = player.root.position.add(new Vector3(0, 1.15, 0));
+        if (elapsed < 2300) {
+            camera.alpha = lerpAngle(cameraSnapshot.alpha, desiredRotation + Math.PI, Math.min(1, elapsed / 1800));
+            camera.beta = cameraSnapshot.beta + (1.15 - cameraSnapshot.beta) * Math.min(1, elapsed / 2000);
+            camera.radius = cameraSnapshot.radius + (5.8 - cameraSnapshot.radius) * Math.min(1, elapsed / 2000);
+            camera.target = Vector3.Lerp(camera.target, cameraTargetWalk, 0.12);
+            if (elapsed > 1200) setRescueCaption(regionId, 'A final touch of magic', `${companionById[region.companionId].name} is almost free.`);
+        } else if (elapsed < 3100) {
+            const t = Math.min(1, (elapsed - 2300) / 800);
+            camera.alpha = lerpAngle(camera.alpha, desiredRotation + Math.PI, 0.16);
+            camera.beta = 1.26;
+            camera.radius += (2.65 - camera.radius) * 0.12;
+            camera.target = Vector3.Lerp(camera.target, handWorld, 0.14);
+            if (player.arms?.[1]) player.arms[1].rotation.x = -0.35 - 0.95 * Math.sin(t * Math.PI / 2);
+            if (player.arms?.[1]) player.arms[1].rotation.z = 0.3;
+            c.hand.scaling.setAll(0.7 + t * 1.7);
+            if (elapsed > 2550) setRescueCaption(regionId, 'The seal begins to crack', 'Magic flows from your hands into the crystal.');
+        } else if (elapsed < 4300) {
+            const t = Math.min(1, (elapsed - 3100) / 1200);
+            camera.radius += (2.35 - camera.radius) * 0.08;
+            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.1);
+            const visibleCount = Math.min(prison.cracks.length, Math.floor(t * (prison.cracks.length + 1)));
+            prison.cracks.forEach((line, index) => line.setEnabled(index < visibleCount));
+            c.hand.scaling.setAll(1.2 + Math.sin(elapsed * 0.02) * 0.22);
+            if (elapsed > 3400) setRescueCaption(regionId, 'Fractures spread across the prison', 'The ancient crystal can no longer contain its prisoner.');
+        } else if (elapsed < 5350) {
+            prison.cracks.forEach(line => line.setEnabled(true));
+            camera.radius += (2.7 - camera.radius) * 0.04;
+            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.08);
+            c.hand.scaling.setAll(1.25);
+            if (elapsed > 4400) setRescueCaption(regionId, 'The crystal is breaking', '');
+        } else if (elapsed < 6400) {
+            if (!c.shardsCreated) { createPrisonShards(prison); c.shardsCreated = true; }
+            const t = Math.min(1, (elapsed - 5350) / 1050);
+            for (let i = 0; i < prison.shards.length; i++) {
+                const shard = prison.shards[i];
+                const a = i * 2.399;
+                shard.position.x += Math.cos(a) * 0.055;
+                shard.position.y += (0.035 + (i % 4) * 0.012);
+                shard.position.z += Math.sin(a) * 0.055;
+                shard.rotation.x += 0.045;
+                shard.rotation.y += 0.035;
+                shard.visibility = 1 - t;
+            }
+            c.hand.visibility = 1 - t;
+            if (elapsed > 5600) setRescueCaption(regionId, `${companionById[region.companionId].name} is free`, 'The crystal prison bursts apart.');
+        } else {
+            const t = Math.min(1, (elapsed - 6400) / 900);
+            camera.alpha = lerpAngle(camera.alpha, cameraSnapshot.alpha, 0.09);
+            camera.beta += (cameraSnapshot.beta - camera.beta) * 0.09;
+            camera.radius += (cameraSnapshot.radius - camera.radius) * 0.09;
+            camera.target = Vector3.Lerp(camera.target, player.root.position.add(new Vector3(0, 1.2, 0)), 0.09);
+            if (t >= 1 || elapsed > 7600) { finishRescueCutscene(false); return; }
+        }
+        c.frameHandle = requestAnimationFrame(tick);
+    };
+    activeRescueCutscene.frameHandle = requestAnimationFrame(tick);
+}
+
+function finishRegionBossProgress(regionId) {
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    if (!region || !progress) return;
+    progress.bossDefeated = true;
+    progress.bossUnlocked = true;
+    progress.rescued = true;
+    if (regionId === 'forest') {
+        state.bossDefeated = true;
+        state.questComplete = true;
+        state.aureliaRecruited = true;
+    }
+    const companion = companionById[region.companionId];
+    if (companion) { companion.recruited = true; companion.active = regionId === 'forest' || activeCompanions().length < 3; }
+    updatePrisonCrystalVisibility();
+    updateHUD();
+    void saveGame(true);
+}
+
 function createInteractables() {
     interactables = [
         { kind: 'planning', label: 'Use planning table', position: new Vector3(80, 0, 78), mesh: planningTable },
@@ -1090,7 +1545,6 @@ function createInteractables() {
         { kind: 'hospital', label: 'Visit the hospital', position: new Vector3(68, 0, 84), mesh: baseGround },
         { kind: 'blacksmith', label: 'Visit the blacksmith', position: new Vector3(92, 0, 84), mesh: baseGround },
         { kind: 'barracks', label: 'Manage your party', position: new Vector3(68, 0, 70), mesh: baseGround },
-        { kind: 'guardian', label: 'Speak with Aurelia', position: new Vector3(4.5, 0, -3.5).add(FOREST_OFFSET), mesh: guardianNPC.root },
         { kind: 'crystal', label: 'Collect Ether crystal', position: new Vector3(-7.8, 0, 4.5).add(FOREST_OFFSET), mesh: forestCrystalMeshes[0] },
         { kind: 'crystal', label: 'Collect Ether crystal', position: new Vector3(9.1, 0, 1.8).add(FOREST_OFFSET), mesh: forestCrystalMeshes[1] },
         { kind: 'crystal', label: 'Collect Ether crystal', position: new Vector3(-10.5, 0, -15.8).add(FOREST_OFFSET), mesh: forestCrystalMeshes[2] }
@@ -1163,7 +1617,7 @@ tail.material = body.material;
     ring.position.y = 0.06;
     ring.rotation.x = Math.PI / 2;
     ring.material = mat('wolf hostile ring', new Color3(0.75, 0.27, 0.18), new Color3(0.25, 0.05, 0.02));
-    const enemy = { id: enemyId, kind: 'wolf', root, body, hp: stronger ? 95 : 70, maxHp: stronger ? 95 : 70, speed: stronger ? 2.0 : 1.65, damage: stronger ? 13 : 9, attackTimer: 1.2, specialTimer: 0, dead: false, sightRadius: stronger ? 30 : 24, detectionRange: stronger ? 16 : 14, aggro: stronger ? 16 : 14, frozenTimer: 0, frozenMeshes: null };
+    const enemy = { id: enemyId, kind: 'wolf', regionId: 'forest', displayName: stronger ? 'Grove Stalker' : 'Forest Wolf', root, body, hp: stronger ? 95 : 70, maxHp: stronger ? 95 : 70, speed: stronger ? 2.0 : 1.65, damage: stronger ? 13 : 9, attackTimer: 1.2, specialTimer: 0, dead: false, sightRadius: stronger ? 30 : 24, detectionRange: stronger ? 16 : 14, aggro: stronger ? 16 : 14, frozenTimer: 0, frozenMeshes: null };
     enemies.push(enemy);
     return enemy;
 }
@@ -1224,12 +1678,121 @@ function addBoss() {
     aura.position.y = 0.12;
     aura.rotation.x = Math.PI / 2;
     aura.material = mat('boss aura', new Color3(0.61, 0.24, 0.15), new Color3(0.25, 0.04, 0.02));
-    const boss = { id: ++enemyId, kind: 'boss', root, body, hp: 520, maxHp: 520, speed: 1.35, damage: 17, attackTimer: 1.8, specialTimer: 5, dead: false, sightRadius: 40, detectionRange: 22, aggro: 22, frozenTimer: 0, frozenMeshes: null };
+    const boss = { id: ++enemyId, kind: 'boss', regionId: 'forest', displayName: REGION_DATA.forest.bossName, root, body, hp: 520, maxHp: 520, speed: 1.35, damage: 17, attackTimer: 1.8, specialTimer: 5, dead: false, sightRadius: 40, detectionRange: 22, aggro: 22, frozenTimer: 0, frozenMeshes: null };
     enemies.push(boss);
     showToast('The Grove Guardian has awakened. Prepare for a boss battle!');
     setObjective('Defeat the Grove Guardian', 'The forest guardian is corrupted. Coordinate your party and use your abilities.');
     return boss;
 }
+
+function addRegionalEnemy(regionId, position, index = 0) {
+    const region = REGION_DATA[regionId];
+    const root = new TransformNode(`${regionId} enemy ${++enemyId}`, scene);
+    root.position.copyFrom(position);
+    const body = MeshBuilder.CreateSphere(`${region.enemyName} body`, { diameter: 1.65 + (index % 2) * 0.16, segments: 10 }, scene);
+    body.parent = root;
+    body.position.y = 0.9;
+    body.scaling.set(1.1, 0.9, 1.05);
+    body.material = region.enemyMaterial;
+    addShadow(body);
+    const head = MeshBuilder.CreateSphere(`${region.enemyName} head`, { diameter: 0.78, segments: 10 }, scene);
+    head.parent = root;
+    head.position.set(0, 1.4, 0.58);
+    head.material = region.enemyMaterial;
+    for (const side of [-1, 1]) {
+        const horn = MeshBuilder.CreateCylinder(`${region.enemyName} crest`, { height: 0.75 + (index % 2) * 0.2, diameterTop: 0.02, diameterBottom: 0.25, tessellation: 6 }, scene);
+        horn.parent = root;
+        horn.position.set(side * 0.29, 1.9, 0.48);
+        horn.rotation.z = side * -0.32;
+        horn.material = region.crystalMaterial;
+        const eye = MeshBuilder.CreateSphere(`${region.enemyName} eye`, { diameter: 0.12, segments: 8 }, scene);
+        eye.parent = root;
+        eye.position.set(side * 0.2, 1.42, 0.94);
+        eye.material = materials.enemyEye;
+    }
+    for (const x of [-0.48, 0.48]) for (const z of [-0.35, 0.38]) {
+        const leg = MeshBuilder.CreateCylinder(`${region.enemyName} limb`, { height: 0.72, diameter: 0.22, tessellation: 8 }, scene);
+        leg.parent = root;
+        leg.position.set(x, 0.36, z);
+        leg.material = region.enemyMaterial;
+    }
+    const targetRing = MeshBuilder.CreateTorus(`${region.enemyName} target ring`, { diameter: 1.55, thickness: 0.04, tessellation: 24 }, scene);
+    targetRing.parent = root;
+    targetRing.position.y = 0.07;
+    targetRing.rotation.x = Math.PI / 2;
+    targetRing.material = materials.enemyEye;
+    const enemy = { id: enemyId, kind: 'regional', regionId, displayName: region.enemyName, root, body, hp: 115 + index * 8, maxHp: 115 + index * 8, speed: 1.75 + (index % 2) * 0.12, damage: 12 + index, attackTimer: 1.1, specialTimer: 0, dead: false, sightRadius: 31, detectionRange: 18, aggro: 18, frozenTimer: 0, frozenMeshes: null };
+    enemies.push(enemy);
+    return enemy;
+}
+
+function addRegionalBoss(regionId) {
+    const region = REGION_DATA[regionId];
+    const root = new TransformNode(`${regionId} region boss root`, scene);
+    root.position.copyFrom(region.bossPosition);
+    const body = MeshBuilder.CreateSphere(`${region.bossName} core body`, { diameter: 3.8, segments: 14 }, scene);
+    body.parent = root;
+    body.position.y = 1.8;
+    body.scaling.set(1.25, 1.05, 1.2);
+    body.material = region.bossMaterial;
+    addShadow(body);
+    const head = MeshBuilder.CreateSphere(`${region.bossName} head`, { diameter: 1.55, segments: 12 }, scene);
+    head.parent = root;
+    head.position.set(0, 2.85, 1.25);
+    head.material = region.enemyMaterial;
+    for (const side of [-1, 1]) {
+        const crown = MeshBuilder.CreateCylinder(`${region.bossName} crown spike`, { height: 1.85, diameterTop: 0, diameterBottom: 0.42, tessellation: 7 }, scene);
+        crown.parent = root;
+        crown.position.set(side * 0.95, 3.7, 0.9);
+        crown.rotation.z = side * -0.42;
+        crown.material = region.crystalMaterial;
+        const eye = MeshBuilder.CreateSphere(`${region.bossName} eye`, { diameter: 0.25, segments: 10 }, scene);
+        eye.parent = root;
+        eye.position.set(side * 0.42, 2.9, 1.94);
+        eye.material = materials.enemyEye;
+    }
+    for (const side of [-1, 1]) {
+        const shoulder = MeshBuilder.CreateSphere(`${region.bossName} shoulder`, { diameter: 1.5, segments: 10 }, scene);
+        shoulder.parent = root;
+        shoulder.position.set(side * 1.55, 2.05, 0.25);
+        shoulder.material = region.bossMaterial;
+    }
+    const heart = MeshBuilder.CreatePolyhedron(`${region.bossName} exposed heart`, { type: 1, size: 0.62 }, scene);
+    heart.parent = root;
+    heart.position.set(0, 1.85, 1.78);
+    heart.material = region.crystalMaterial;
+    glowLayer.addIncludedOnlyMesh(heart);
+    const aura = MeshBuilder.CreateTorus(`${region.bossName} ground aura`, { diameter: 5.2, thickness: 0.12, tessellation: 32 }, scene);
+    aura.parent = root;
+    aura.position.y = 0.14;
+    aura.rotation.x = Math.PI / 2;
+    aura.material = region.crystalMaterial;
+    const boss = { id: ++enemyId, kind: 'boss', regionId, displayName: region.bossName, root, body, hp: 820, maxHp: 820, speed: 1.42, damage: 21, attackTimer: 1.7, specialTimer: 4.5, dead: false, sightRadius: 46, detectionRange: 25, aggro: 25, frozenTimer: 0, frozenMeshes: null };
+    enemies.push(boss);
+    showToast(`${region.bossName} has awakened!`, 4);
+    setObjective(`Defeat ${region.bossName}`, `The boss of ${region.name} guards a crystal prison. Defeat it to free the trapped companion.`);
+    return boss;
+}
+
+const spawnedRegions = new Set();
+function ensureRegionEncounter(regionId, rebuild = false) {
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    if (!region || !progress || progress.bossDefeated) return;
+    if (rebuild) spawnedRegions.delete(regionId);
+    if (spawnedRegions.has(regionId)) return;
+    spawnedRegions.add(regionId);
+    const remaining = Math.max(0, 3 - progress.kills);
+    for (let i = 0; i < remaining; i++) {
+        if (regionId === 'forest') addWolf(region.mobPositions[i] || region.mobPositions[0]);
+        else addRegionalEnemy(regionId, region.mobPositions[i] || region.center, i);
+    }
+    if (progress.bossUnlocked) {
+        if (regionId === 'forest') addBoss();
+        else addRegionalBoss(regionId);
+    }
+}
+
 function distance(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 function nearestEnemyFrom(position, maxDistance = Number.POSITIVE_INFINITY) {
     let best = null;
@@ -1328,10 +1891,16 @@ function startCompanionConversation(active) {
 }
 
 function updateQuestProgress() {
-    const progress = state.bossDefeated ? 100 : state.wolfKills >= 3 ? 75 : state.wolfKills / 3 * 55;
-    $('quest-progress-bar').style.width = `${progress}%`;
-    $('quest-progress-text').textContent = state.bossDefeated ? 'Forest cleared · Return to base' : state.bossUnlocked ? 'Boss encounter available' : `Forest threats defeated: ${Math.min(state.wolfKills, 3)} / 3`;
+    const regionId = state.zone !== 'base' && REGION_DATA[state.zone] ? state.zone : 'forest';
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    const pct = progress.bossDefeated ? 100 : progress.bossUnlocked ? 78 : progress.kills / 3 * 60;
+    $('quest-progress-bar').style.width = `${pct}%`;
+    $('quest-progress-text').textContent = progress.bossDefeated
+        ? `${region.name} cleared · ${companionById[region.companionId].name} rescued`
+        : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / 3 threats defeated`;
 }
+
 function updateHUD() {
     const maxHp = 120 + (state.level - 1) * 14;
     const maxMana = 80 + (state.level - 1) * 8;
@@ -1367,9 +1936,9 @@ function updateHUD() {
     $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : 'FROST NOVA'}`;
     const target = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(18);
     const enemyCard = $('enemy-card');
-    if (state.zone === 'forest' && target) {
+    if (state.zone !== 'base' && target) {
         enemyCard.classList.remove('hidden');
-        $('enemy-name').textContent = target.kind === 'boss' ? 'Grove Guardian' : 'Forest Wolf';
+        $('enemy-name').textContent = target.displayName || (target.kind === 'boss' ? 'Grove Guardian' : 'Forest Wolf');
         $('enemy-hp-value').textContent = `${Math.ceil(target.hp)} / ${target.maxHp}`;
         $('enemy-hp-bar').style.width = `${Math.max(0, target.hp / target.maxHp * 100)}%`;
     }
@@ -1398,10 +1967,10 @@ function makeSaveData() {
     for (const c of companions)
         active[c.id] = c.active;
     return {
-        version: 2, worldLayoutVersion: 2, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
+        version: 3, worldLayoutVersion: 3, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
         gold: state.gold, crystals: state.crystals, tokens: state.tokens, weaponLevel: state.weaponLevel,
         wolfKills: state.wolfKills, bossDefeated: state.bossDefeated, aureliaRecruited: state.aureliaRecruited,
-        partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
+        regionProgress: state.regionProgress, partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
         zone: state.zone, playerX: player.root.position.x, playerZ: player.root.position.z,
         worldMinutes: state.worldMinutes, weatherIndex: state.weatherIndex, collectedCrystalIds: Array.from(state.crystalsCollected)
     };
@@ -1452,7 +2021,7 @@ async function readSaveData() {
     }
     try {
         const raw = localStorage.getItem(SAVE_KEY);
-                return raw ? JSON.parse(raw) : null;
+        return raw ? JSON.parse(raw) : null;
     }
     catch {
         return null;
@@ -1471,70 +2040,93 @@ function applySave(data) {
     state.crystals = Math.max(0, Number(data.crystals) || 0);
     state.tokens = Math.max(0, Number(data.tokens) || 0);
     state.weaponLevel = Math.max(1, Number(data.weaponLevel) || 1);
+    state.regionProgress = freshRegionProgress();
+    if (data.regionProgress && typeof data.regionProgress === 'object') {
+        for (const id of Object.keys(REGION_DATA)) {
+            const saved = data.regionProgress[id];
+            if (saved) state.regionProgress[id] = {
+                kills: Math.max(0, Math.min(3, Number(saved.kills) || 0)),
+                bossUnlocked: !!saved.bossUnlocked,
+                bossDefeated: !!saved.bossDefeated,
+                // A saved recruit flag is never accepted unless that region's boss was beaten.
+                rescued: !!saved.rescued && !!saved.bossDefeated
+            };
+        }
+    }
+    // Migrate the former single-region save format without resetting the forest.
     state.wolfKills = Math.max(0, Number(data.wolfKills) || 0);
-    state.bossDefeated = Boolean(data.bossDefeated);
-    state.bossUnlocked = state.wolfKills >= 3;
-    state.aureliaRecruited = Boolean(data.aureliaRecruited);
+    state.regionProgress.forest.kills = Math.max(state.regionProgress.forest.kills, Math.min(3, state.wolfKills));
+    state.regionProgress.forest.bossDefeated = state.regionProgress.forest.bossDefeated || !!data.bossDefeated;
+    state.regionProgress.forest.bossUnlocked = state.regionProgress.forest.bossUnlocked || state.regionProgress.forest.kills >= 3 || state.regionProgress.forest.bossDefeated;
+    state.regionProgress.forest.rescued = state.regionProgress.forest.rescued || (Number(data.version || 0) < 3 && state.regionProgress.forest.bossDefeated);
+    state.bossDefeated = state.regionProgress.forest.bossDefeated;
+    state.bossUnlocked = state.regionProgress.forest.bossUnlocked;
+    state.aureliaRecruited = state.regionProgress.forest.rescued;
     state.formation = data.formation || 'balanced';
     state.strategy = data.strategy || 'protect';
     state.command = data.command || 'follow';
-    state.zone = data.zone === 'forest' ? 'forest' : 'base';
+    state.zone = data.zone === 'base' || REGION_DATA[data.zone] ? data.zone : 'base';
     state.worldMinutes = Number(data.worldMinutes) || 9 * 60;
     state.weatherIndex = Number(data.weatherIndex) || 0;
     state.crystalsCollected.clear();
-    for (const id of data.collectedCrystalIds ?? [])
-        state.crystalsCollected.add(id);
-    interactables.filter(item => item.kind === 'crystal').forEach((item, index) => { const collected = state.crystalsCollected.has(`crystal-${index}`); item.collected = collected; item.mesh.setEnabled(!collected); });
-    for (const c of companions)
-        c.active = Boolean(data.partyActive?.[c.id]);
-    companions[2].recruited = state.aureliaRecruited;
-    companions[2].active = state.aureliaRecruited && Boolean(data.partyActive?.aurelia);
-    guardianNPC.root.setEnabled(!state.aureliaRecruited);
-    guardianMarker.setEnabled(!state.aureliaRecruited);
+    for (const id of data.collectedCrystalIds ?? []) state.crystalsCollected.add(id);
+    interactables.filter(item => item.kind === 'crystal').forEach((item, index) => {
+        const collected = state.crystalsCollected.has(`crystal-${index}`);
+        item.collected = collected;
+        item.mesh.setEnabled(!collected);
+    });
+    for (const c of companions) {
+        const region = Object.values(REGION_DATA).find(r => r.companionId === c.id);
+        c.recruited = region ? !!state.regionProgress[region.id].rescued : (c.id === 'reaphel' || c.id === 'sylva');
+        c.active = c.recruited && (data.partyActive ? !!data.partyActive[c.id] : c.id === 'reaphel' || c.id === 'sylva');
+    }
+    // A legacy save may have unlocked Aurelia before the boss requirement existed.
+    if (!state.regionProgress.forest.bossDefeated) {
+        state.aureliaRecruited = false;
+        companions[2].recruited = false;
+        companions[2].active = false;
+        state.regionProgress.forest.rescued = false;
+    }
     let savedX = Number(data.playerX);
     let savedZ = Number(data.playerZ);
-    if (!Number.isFinite(savedX)) savedX = state.zone === 'base' ? 80 : 80;
-    if (!Number.isFinite(savedZ)) savedZ = state.zone === 'base' ? 73 : 52;
-
-    // Older saves stored the forest around the origin. Move those coordinates to the
-    // new forest beside camp; old connector-road positions are safely placed at its entrance.
-    if (data.worldLayoutVersion !== 2 && state.zone === 'forest') {
+    if (!Number.isFinite(savedX)) savedX = state.zone === 'base' ? 80 : REGION_DATA[state.zone]?.center.x ?? 80;
+    if (!Number.isFinite(savedZ)) savedZ = state.zone === 'base' ? 73 : REGION_DATA[state.zone]?.center.z ?? 52;
+    if ((data.worldLayoutVersion || 0) < 2 && state.zone === 'forest') {
         const wasInsideOldForest = savedX >= -37 && savedX <= 37 && savedZ >= -40 && savedZ <= 34;
-        if (wasInsideOldForest) {
-            savedX += FOREST_OFFSET.x;
-            savedZ += FOREST_OFFSET.z;
-            savedX = Math.max(44, Math.min(116, savedX));
-            savedZ = Math.max(6, Math.min(54, savedZ));
-        } else {
-            savedX = 80;
-            savedZ = 52;
-        }
+        if (wasInsideOldForest) { savedX += FOREST_OFFSET.x; savedZ += FOREST_OFFSET.z; }
+        else { savedX = 80; savedZ = 52; }
     }
     player.root.position.set(savedX, 0, savedZ);
-    if (state.bossDefeated) {
-        state.questComplete = true;
-        setObjective('The Emerald Forest is cleared', 'The Grove Guardian has fallen. Random encounters can now appear in this region.');
+    if (state.zone === 'base') {
+        setObjective('Headquarters', 'Visit the planning table, hospital or blacksmith, then choose your next expedition.');
+    } else {
+        const loadedRegion = REGION_DATA[state.zone];
+        const loadedProgress = state.regionProgress[state.zone];
+        if (loadedProgress.bossDefeated) {
+            setObjective(`Explore ${loadedRegion.name}`, `The ${loadedRegion.bossName} has been defeated. Its rescued companion is available at the planning table.`);
+        } else if (loadedProgress.bossUnlocked) {
+            setObjective(`Defeat ${loadedRegion.bossName}`, `The ${loadedRegion.bossName} guards a crystal prison behind its lair.`);
+        } else {
+            setObjective(`Explore ${loadedRegion.name}`, `Defeat three ${loadedRegion.enemyName} to reveal ${loadedRegion.bossName}.`);
+        }
     }
-    else if (state.bossUnlocked)
-        setObjective('Defeat the Grove Guardian', 'The corrupted guardian has awakened in the northern grove.');
-    else
-        setObjective('Clear the forest path', 'Defeat three forest wolves, then investigate the ancient grove.');
     applyAppearance();
+    updatePrisonCrystalVisibility();
     positionCompanions();
     updateZoneVisuals();
     enemies.forEach(enemy => enemy.root.dispose());
     enemies = [];
+    spawnedRegions.clear();
     currentTarget = null;
-    if (!state.bossDefeated) {
-        for (let i = 0; i < Math.max(0, 3 - state.wolfKills); i++)
-            addWolf([new Vector3(-5, 0, 8), new Vector3(0, 0, 3), new Vector3(6, 0, -3)][i]);
-        if (state.bossUnlocked)
-            addBoss();
+    for (const id of Object.keys(REGION_DATA)) {
+        const progress = state.regionProgress[id];
+        if (!progress.bossDefeated) ensureRegionEncounter(id, true);
     }
     $('weather-label').textContent = weatherNames[state.weatherIndex % weatherNames.length];
     $('weather-overlay').className = `weather-overlay ${state.weatherIndex === 1 ? 'rain' : state.weatherIndex === 2 ? 'mist' : ''}`;
     updateHUD();
 }
+
 function applyAppearance() {
     playerOutfit.diffuseColor = appearance === 'midnight' ? new Color3(0.14, 0.18, 0.28) : appearance === 'sunrise' ? new Color3(0.42, 0.25, 0.16) : new Color3(0.18, 0.36, 0.28);
     setCharacterRole(player, playerClass);
@@ -1549,9 +2141,11 @@ function positionCompanions() {
         const offset = formationOffset(index);
         c.model.root.position.set(player.root.position.x + offset.x, 0, player.root.position.z + offset.z);
     });
-    for (const c of companions)
-        if (!c.active || !c.recruited || c.recovering)
-            c.model.root.setEnabled(false);
+    for (const c of companions) {
+        const region = Object.values(REGION_DATA).find(r => r.companionId === c.id);
+        const isPrisoner = !!region && !state.regionProgress[region.id].rescued;
+        c.model.root.setEnabled(isPrisoner || (c.active && c.recruited && !c.recovering));
+    }
 }
 function exportSave() {
     const data = makeSaveData();
@@ -1597,40 +2191,48 @@ function dealDamage(enemy, amount) {
     if (enemy.hp <= 0) defeatEnemy(enemy);
 }
 function defeatEnemy(enemy) {
-    if (enemy.dead)
-        return;
+    if (enemy.dead) return;
     restoreFrozenEnemy(enemy);
     enemy.dead = true;
     enemy.root.setEnabled(false);
-    if (enemy.kind === 'wolf') {
-        state.wolfKills++;
-        state.gold += 15;
-        gainXP(42);
-        showToast('Forest wolf defeated · +42 XP · +15 gold');
-        if (state.wolfKills >= 3 && !state.bossDefeated && !state.bossUnlocked) {
-            state.bossUnlocked = true;
-            addBoss();
-            setObjective('Defeat the Grove Guardian', 'Three wolves have been defeated. The corruption is gathering at the ancient grove.');
+    const regionId = enemy.regionId || (enemy.kind === 'wolf' ? 'forest' : null);
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    if (enemy.kind !== 'boss' && region && progress) {
+        progress.kills = Math.min(3, progress.kills + 1);
+        if (regionId === 'forest') state.wolfKills = progress.kills;
+        state.gold += regionId === 'forest' ? 15 : 24;
+        gainXP(regionId === 'forest' ? 42 : 58);
+        showToast(`${enemy.displayName || region.enemyName} defeated · +XP · Gold gained`);
+        if (progress.kills >= 3 && !progress.bossUnlocked && !progress.bossDefeated) {
+            progress.bossUnlocked = true;
+            if (regionId === 'forest') { state.bossUnlocked = true; addBoss(); }
+            else addRegionalBoss(regionId);
+            setObjective(`Defeat ${region.bossName}`, `Three ${region.enemyName} have been defeated. The boss guards a crystal prison.`);
+        } else if (!progress.bossUnlocked) {
+            setObjective(`Hunt the ${region.enemyName}`, `${region.name}: ${progress.kills} of 3 guardians defeated.`);
         }
-        else if (!state.bossUnlocked)
-            setObjective('Clear the forest path', `Defeat three forest wolves. ${Math.min(state.wolfKills, 3)} of 3 defeated.`);
-    }
-    else {
-        state.bossDefeated = true;
-        state.questComplete = true;
-        state.gold += 250;
+    } else if (enemy.kind === 'boss' && region && progress) {
+        progress.bossDefeated = true;
+        progress.bossUnlocked = true;
+        if (regionId === 'forest') {
+            state.bossDefeated = true;
+            state.questComplete = true;
+            state.bossUnlocked = true;
+        }
+        state.gold += region.rewardGold;
         state.tokens += 1;
-        gainXP(300);
+        gainXP(region.rewardXP);
         state.combatTimer = 0;
-        setObjective('The Emerald Forest is cleared', 'The Grove Guardian has fallen. Return to base to claim your reward and prepare for the next region.');
+        setObjective(`${region.bossName} defeated`, `A crystal prison behind the boss contains ${companionById[region.companionId].name}.`);
         updateHUD();
         void saveGame(true);
-        $('victory-overlay').classList.remove('hidden');
-        state.paused = true;
+        beginRescueCutscene(regionId);
     }
     updateHUD();
     void saveGame(true);
 }
+
 function attack() {
     if (state.paused || !state.started || state.attackCooldown > 0) return;
 
@@ -1974,53 +2576,76 @@ function moveToward(root, destination, speed, dt) {
 // -----------------------------------------------------------------------------
 // Base, travel, planning and interaction actions.
 // -----------------------------------------------------------------------------
+function regionAtPosition(x, z) {
+    if (x >= 55 && x <= 105 && z >= 55 && z <= 105) return 'base';
+    for (const id of ['forest', 'emberfall', 'frostveil', 'mire', 'starfall']) {
+        const b = REGION_DATA[id].bounds;
+        if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return id;
+    }
+    // Keep narrow connecting roads assigned to the region the player is walking toward.
+    if (Math.abs(x - 80) < 5.5 && z < 3 && z > -5) return 'emberfall';
+    if (Math.abs(z - 32) < 5.5 && x > 117 && x < 123) return 'frostveil';
+    if (Math.abs(z - 32) < 5.5 && x > 37 && x < 43) return 'mire';
+    if (Math.abs(x - 80) < 6 && z > 104 && z < 133) return 'starfall';
+    return null;
+}
 function updateZoneFromPosition() {
     const x = player.root.position.x, z = player.root.position.z;
-    const inBase = x >= 55 && x <= 105 && z >= 55 && z <= 105;
-    const nextZone = inBase ? 'base' : 'forest';
+    const nextZone = regionAtPosition(x, z) || state.zone || 'base';
     if (nextZone !== state.zone) {
         state.zone = nextZone;
         updateZoneVisuals();
-        if (nextZone === 'base') setObjective(state.bossDefeated ? 'Headquarters · Forest cleared' : 'Back at headquarters', 'Visit the planning table, hospital or blacksmith, then walk the stone road when you are ready.');
-        else setObjective(state.bossDefeated ? 'Explore the cleared forest' : state.bossUnlocked ? 'Defeat the Grove Guardian' : 'Clear the forest path', state.bossDefeated ? 'The region is cleared. Rare encounters and discoveries may still appear.' : 'Explore the forest, gather Ether crystals and face the Grove Guardian.');
-        showToast(nextZone === 'base' ? 'You have arrived at headquarters.' : 'You have entered the Emerald Forest.');
+        if (nextZone !== 'base') {
+            ensureRegionEncounter(nextZone);
+            const region = REGION_DATA[nextZone];
+            const progress = state.regionProgress[nextZone];
+            if (progress.bossDefeated) setObjective(`Explore ${region.name}`, `The ${region.bossName} has been defeated. Its rescued companion is available at the planning table.`);
+            else if (progress.bossUnlocked) setObjective(`Defeat ${region.bossName}`, `The boss is guarding a crystal prison behind its lair.`);
+            else setObjective(`Explore ${region.name}`, `Defeat three ${region.enemyName} to reveal the region boss.`);
+        } else {
+            setObjective('Headquarters', 'Visit the planning table, hospital or blacksmith, then choose your next expedition.');
+        }
+        showToast(nextZone === 'base' ? 'You have arrived at headquarters.' : `You have entered ${REGION_DATA[nextZone].name}.`);
         updateHUD();
     }
 }
 function setZone(zone) {
+    if (zone !== 'base' && !REGION_DATA[zone]) zone = 'base';
     state.zone = zone;
     updateZoneVisuals();
     if (zone === 'base') {
         player.root.position.set(80, 0, 73);
         positionCompanions();
-        setObjective(state.bossDefeated ? 'The Emerald Forest is cleared' : 'Prepare your next expedition', state.bossDefeated ? 'The forest is safe for now. Visit the planning table to review your party.' : 'Use the planning table to prepare, rest at the hospital and upgrade your weapon.');
-    }
-    else {
-        // The forest now sits north of headquarters instead of around the world origin.
-        player.root.position.set(80, 0, 52);
+        setObjective('Headquarters', 'Visit the planning table, rest at the hospital and upgrade your equipment before setting out.');
+    } else {
+        const region = REGION_DATA[zone];
+        const entry = zone === 'forest' ? new Vector3(80,0,52) : region.center.add(region.entryDirection.scale(31));
+        player.root.position.set(entry.x, 0, entry.z);
+        ensureRegionEncounter(zone);
         positionCompanions();
-        if (state.bossDefeated)
-            setObjective('Explore the cleared forest', 'This region is cleared. Look for occasional rare encounters and hidden discoveries.');
-        else if (state.bossUnlocked)
-            setObjective('Defeat the Grove Guardian', 'The corrupted guardian awaits at the ancient grove to the north.');
-        else
-            setObjective('Clear the forest path', 'Find Aurelia, gather Ether crystals and defeat three forest wolves.');
+        const progress = state.regionProgress[zone];
+        setObjective(progress.bossDefeated ? `Explore ${region.name}` : progress.bossUnlocked ? `Defeat ${region.bossName}` : `Explore ${region.name}`, progress.bossDefeated ? 'The area has been cleared. Continue exploring and look for the road to the next region.' : `Defeat three ${region.enemyName} to draw out ${region.bossName}.`);
     }
     camera.target = player.root.position.add(new Vector3(0, 1.2, 0));
     nearby = null;
     updateHUD();
 }
+
 function updateZoneVisuals() {
-    // The zones share one scene, but the environment fog keeps the active area focused.
     if (state.zone === 'base') {
         scene.fogDensity = 0.0045;
         scene.fogColor = new Color3(0.21, 0.29, 0.23);
+        return;
     }
-    else {
-        scene.fogDensity = state.weatherIndex === 2 ? 0.014 : 0.0065;
-        scene.fogColor = new Color3(0.16, 0.27, 0.20);
-    }
+    const fogColors = {
+        forest: new Color3(0.16, 0.27, 0.20), emberfall: new Color3(0.29, 0.13, 0.10),
+        frostveil: new Color3(0.52, 0.68, 0.77), mire: new Color3(0.11, 0.22, 0.17),
+        starfall: new Color3(0.48, 0.37, 0.24)
+    };
+    scene.fogDensity = state.weatherIndex === 2 ? 0.014 : 0.0065;
+    scene.fogColor = fogColors[state.zone] || fogColors.forest;
 }
+
 function canReturnToBase() {
     return state.zone !== 'base';
 }
@@ -2044,7 +2669,7 @@ function departForForest() {
     state.paused = false;
     showToast('Expedition ready. Follow the stone road out of camp to reach the Emerald Forest.');
     if (!state.bossDefeated)
-        setObjective(state.bossUnlocked ? 'Defeat the Grove Guardian' : 'Clear the forest path', state.bossUnlocked ? 'Travel north to the ancient grove and defeat the guardian.' : 'Recruit Aurelia, collect Ether crystals and defeat three wolves.');
+        setObjective(state.bossUnlocked ? 'Defeat the Grove Guardian' : 'Clear the forest path', state.bossUnlocked ? 'Travel north to the ancient grove and defeat the guardian.' : 'Collect Ether crystals and defeat three wolves to reveal the Grove Guardian.');
 }
 function openPause() {
     if (!state.started || $('start-overlay').classList.contains('hidden') === false)
@@ -2056,29 +2681,64 @@ function openPause() {
     $('settings-overlay').classList.add('hidden');
 }
 function closePause() { $('pause-overlay').classList.add('hidden'); state.paused = false; }
+function ensureCompanionPlanningControls() {
+    const section = document.querySelector('#planning-overlay .planning-section');
+    if (!section) return;
+    let list = section.querySelector('.extra-companion-options');
+    if (!list) {
+        list = document.createElement('div');
+        list.className = 'extra-companion-options';
+        section.appendChild(list);
+    }
+    list.innerHTML = '';
+    for (const c of companions.slice(3)) {
+        const label = document.createElement('label');
+        label.className = 'check-row';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `party-${c.id}`;
+        input.checked = c.active;
+        input.disabled = !c.recruited;
+        const span = document.createElement('span');
+        const title = document.createElement('b'); title.textContent = c.name;
+        const subtitle = document.createElement('small'); subtitle.textContent = c.recruited ? `${c.role} · Rescued` : `${c.role} · Trapped in ${Object.values(REGION_DATA).find(r => r.companionId === c.id)?.name || 'a region'}`;
+        span.append(title, subtitle); label.append(input, span); list.appendChild(label);
+    }
+}
 function openPlanning(fromPause) {
     planningFromPaused = fromPause || state.paused;
     state.paused = true;
     $('pause-overlay').classList.add('hidden');
     $('planning-overlay').classList.remove('hidden');
-    $('party-reaphel').checked = companions[0].active;
-    $('party-sylva').checked = companions[1].active;
-    $('party-aurelia').checked = companions[2].active;
-    $('party-aurelia').disabled = !state.aureliaRecruited;
+    ensureCompanionPlanningControls();
+    companions.forEach(c => {
+        const input = document.getElementById(`party-${c.id}`);
+        if (input) { input.checked = c.active; input.disabled = !c.recruited; }
+    });
     $('formation-select').value = state.formation;
     $('strategy-select').value = state.strategy;
 }
 function applyPlanningSelections() {
-    companions[0].active = $('party-reaphel').checked;
-    companions[1].active = $('party-sylva').checked;
-    companions[2].active = state.aureliaRecruited && $('party-aurelia').checked;
+    const chosen = companions.filter(c => {
+        const input = document.getElementById(`party-${c.id}`);
+        return c.recruited && !!input?.checked;
+    });
+    if (chosen.length > 3) {
+        chosen.slice(3).forEach(c => {
+            const input = document.getElementById(`party-${c.id}`);
+            if (input) input.checked = false;
+        });
+        showToast('Your expedition can include up to three companions.');
+    }
+    const allowed = new Set(chosen.slice(0, 3).map(c => c.id));
+    companions.forEach(c => { c.active = c.recruited && allowed.has(c.id); });
     state.formation = $('formation-select').value;
     state.strategy = $('strategy-select').value;
-    if (activeCompanions().length === 0)
-        companions[0].active = true;
+    if (activeCompanions().length === 0) companions[0].active = true;
     positionCompanions();
     updateHUD();
 }
+
 function closePlanning() {
     applyPlanningSelections();
     $('planning-overlay').classList.add('hidden');
@@ -2162,22 +2822,6 @@ function interact() {
         case 'barracks':
             openPlanning(false);
             break;
-        case 'guardian':
-            if (!state.aureliaRecruited) {
-                state.aureliaRecruited = true;
-                companions[2].recruited = true;
-                                companions[2].active = true;
-                guardianNPC.root.setEnabled(false);
-                guardianMarker.setEnabled(false);
-                companions[2].model.root.setEnabled(true);
-                companions[2].model.root.position.copyFrom(player.root.position.add(new Vector3(2, 0, 1)));
-                showToast('Aurelia has joined your party! She can heal companions during combat.');
-                updateHUD();
-                void saveGame(true);
-            }
-            else
-                showToast('Aurelia: “The old roots whisper of a guardian deeper in the grove.”');
-            break;
         case 'crystal': {
             const crystalIndex = interactables.filter(item => item.kind === 'crystal').indexOf(nearby);
             const key = `crystal-${crystalIndex}`;
@@ -2199,13 +2843,11 @@ function updateNearby() {
     nearby = null;
     let best = 3.1;
     for (const item of interactables) {
-        if (item.kind === 'guardian' && state.aureliaRecruited)
-            continue;
         if (item.kind === 'crystal' && item.collected)
             continue;
         if ((item.kind === 'planning' || item.kind === 'bed' || item.kind === 'hospital' || item.kind === 'blacksmith' || item.kind === 'barracks') && state.zone !== 'base')
             continue;
-        if ((item.kind === 'guardian' || item.kind === 'crystal') && state.zone !== 'forest')
+        if (item.kind === 'crystal' && state.zone !== 'forest')
             continue;
         const d = distance(player.root.position, item.position);
         if (d < best) {
@@ -2225,70 +2867,40 @@ function startNewGame() {
     playerName = ($('character-name-input').value.trim() || 'Wayfarer').slice(0, 18);
     playerClass = $('class-select').value;
     appearance = $('appearance-select').value;
-    state.level = 1;
-    state.xp = 0;
-    state.hp = 120;
-    state.mana = 80;
-    state.gold = 100;
-    state.crystals = 0;
-    state.tokens = 0;
-    state.weaponLevel = 1;
-    state.wolfKills = 0;
-    state.bossUnlocked = false;
-    state.bossDefeated = false;
-    state.questComplete = false;
-    state.aureliaRecruited = false;
-    state.combatTimer = 0;
-    state.attackCooldown = 0;
-    state.nightSpawned = false;
-    state.randomEventTimer = 0;
-    state.command = 'follow';
-    state.formation = 'balanced';
-    state.strategy = 'protect';
-    state.defaultAbility = 'arcane';
-    state.abilityCooldowns.arcane = 0;
-    state.abilityCooldowns.heal = 0;
-    state.abilityCooldowns.nova = 0;
-    state.aureliaRecruited = false;
-    state.crystalsCollected.clear();
-    for (const item of interactables)
-        if (item.kind === 'crystal') {
-            item.collected = false;
-            item.mesh.setEnabled(true);
-        }
-    state.worldMinutes = 9 * 60;
-    state.weatherIndex = 0;
-    state.zone = 'base';
-    companions[0].active = true;
-    companions[1].active = true;
-    companions[2].active = false;
-    companions[2].recruited = false;
-    companions.forEach(c => { c.hp = c.maxHp; c.recovering = false; c.recoverTimer = 0; c.command = null; });
-    guardianNPC.root.setEnabled(true);
-    guardianMarker.setEnabled(true);
-    aureliaModel.root.setEnabled(false);
-    $('weather-label').textContent = 'CLEAR';
-    $('weather-overlay').className = 'weather-overlay';
+    state.level = 1; state.xp = 0; state.hp = 120; state.mana = 80;
+    state.gold = 100; state.crystals = 0; state.tokens = 0; state.weaponLevel = 1;
+    state.wolfKills = 0; state.bossUnlocked = false; state.bossDefeated = false;
+    state.questComplete = false; state.aureliaRecruited = false; state.regionProgress = freshRegionProgress();
+    state.combatTimer = 0; state.attackCooldown = 0; state.nightSpawned = false; state.randomEventTimer = 0;
+    state.command = 'follow'; state.formation = 'balanced'; state.strategy = 'protect';
+    state.defaultAbility = 'arcane'; state.abilityCooldowns.arcane = 0; state.abilityCooldowns.heal = 0; state.abilityCooldowns.nova = 0;
+    state.cutsceneActive = false; state.crystalsCollected.clear();
+    for (const item of interactables) if (item.kind === 'crystal') { item.collected = false; item.mesh.setEnabled(true); }
+    state.worldMinutes = 9 * 60; state.weatherIndex = 0; state.zone = 'base';
+    companions.forEach((c, index) => {
+        c.active = index < 2; c.recruited = index < 2; c.hp = c.maxHp;
+        c.recovering = false; c.recoverTimer = 0; c.command = null; c.ambientState = null;
+        c.model.root.setEnabled(false);
+    });
+    companions[0].active = true; companions[1].active = true;
+    guardianNPC.root.setEnabled(false); guardianMarker.setEnabled(false);
+    updatePrisonCrystalVisibility();
+    $('weather-label').textContent = 'CLEAR'; $('weather-overlay').className = 'weather-overlay';
     currentTarget = null;
-    enemies.forEach(e => e.root.dispose());
-    enemies = [];
-    projectiles.forEach(p => p.mesh.dispose());
-    projectiles = [];
-    for (let i = 0; i < 3; i++)
-        addWolf([new Vector3(-5, 0, 8), new Vector3(0, 0, 3), new Vector3(6, 0, -3)][i]);
-    state.bossUnlocked = false;
+    enemies.forEach(e => e.root.dispose()); enemies = []; spawnedRegions.clear();
+    projectiles.forEach(p => p.mesh.dispose()); projectiles = [];
+    for (const id of Object.keys(REGION_DATA)) if (id !== 'forest') state.regionProgress[id].kills = 0;
+    ensureRegionEncounter('forest', true);
     player.root.position.set(80, 0, 73);
-    applyAppearance();
-    positionCompanions();
-    state.started = true;
-    state.paused = false;
+    applyAppearance(); positionCompanions();
+    state.started = true; state.paused = false;
     $('start-overlay').classList.add('hidden');
     updateZoneVisuals();
-    setObjective('Prepare your first expedition', 'Use the planning table in the courtyard, then depart for the Emerald Forest.');
-    updateHUD();
-    showToast(`Welcome, ${playerName}. Your adventure begins at headquarters.`);
+    setObjective('Prepare your first expedition', 'Use the planning table in the courtyard, then follow the stone road to the Emerald Forest.');
+    updateHUD(); showToast(`Welcome, ${playerName}. Your adventure begins at headquarters.`);
     void saveGame(true);
 }
+
 async function continueGame() {
     const data = await readSaveData();
     if (!data) {
@@ -2301,6 +2913,8 @@ async function continueGame() {
     $('start-overlay').classList.add('hidden');
     showToast('Welcome back to Etheria.');
     updateHUD();
+    const pendingRescue = Object.keys(REGION_DATA).find(id => state.regionProgress[id].bossDefeated && !state.regionProgress[id].rescued);
+    if (pendingRescue) beginRescueCutscene(pendingRescue);
 }
 // -----------------------------------------------------------------------------
 // Day/night, weather and runtime updates.
@@ -2388,13 +3002,14 @@ function updateEnemies(dt) {
                 enemy.attackTimer = enemy.kind === 'boss' ? 2.0 : 1.8;
                 if (enemy.kind === 'boss' && enemy.specialTimer <= 0) {
                     enemy.specialTimer = 6;
-                    burstEffect(enemy.root.position, materials.fire, 5.1);
+                    const bossRegion = REGION_DATA[enemy.regionId || 'forest'];
+                    burstEffect(enemy.root.position, bossRegion?.crystalMaterial || materials.fire, 5.1);
                     if (distance(player.root.position, enemy.root.position) < 6)
                         state.hp = Math.max(0, state.hp - 12);
                     for (const companion of activeCompanions())
                         if (distance(companion.model.root.position, enemy.root.position) < 6)
                             companion.hp = Math.max(0, companion.hp - 12);
-                    showToast('The Grove Guardian unleashes a root shockwave!');
+                    showToast(`${enemy.displayName || bossRegion?.bossName || 'The boss'} unleashes a powerful shockwave!`);
                     if (state.hp <= 0)
                         playerDefeated();
                 }
@@ -2604,9 +3219,9 @@ function updateMovement(dt) {
         player.root.position.y += (0 - player.root.position.y) * Math.min(1, dt * 10);
         animateCharacterMovement(player, false, state.stepTime / 9);
     }
-    // The camp and forest are one continuous map; the connecting road is walkable in both directions.
-    player.root.position.x = Math.max(44, Math.min(116, player.root.position.x));
-    player.root.position.z = Math.max(3, Math.min(104, player.root.position.z));
+    // Expanded continuous world bounds: headquarters, the original forest and all four new regions.
+    player.root.position.x = Math.max(-42, Math.min(202, player.root.position.x));
+    player.root.position.z = Math.max(-84, Math.min(214, player.root.position.z));
     updateZoneFromPosition();
     camera.target = Vector3.Lerp(camera.target, player.root.position.add(new Vector3(0, 1.25, 0)), 1 - Math.pow(0.001, dt));
     animateCharacterGuard(player, (keys.has('ShiftLeft') || keys.has('ShiftRight')) && playerClass === 'knight', dt);
@@ -2701,7 +3316,7 @@ $('import-save-input').addEventListener('change', event => {
     reader.onload = () => {
         try {
             const data = JSON.parse(String(reader.result));
-            if (data.version !== 2)
+            if (![2, 3].includes(data.version))
                 throw new Error('Unsupported save version');
             applySave(data);
             void saveGame(true);
@@ -2715,6 +3330,12 @@ $('import-save-input').addEventListener('change', event => {
     reader.readAsText(file);
 });
 window.addEventListener('keydown', event => {
+    if (activeRescueCutscene) {
+        if (event.code === 'Escape' || event.code === 'Space' || event.code === 'Enter') {
+            event.preventDefault(); finishRescueCutscene(true);
+        }
+        return;
+    }
     if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code))
         event.preventDefault();
     if (event.code === 'Escape' && state.started) {
@@ -2771,7 +3392,7 @@ window.addEventListener('keydown', event => {
             if (targets.length) {
                 const currentIndex = currentTarget ? targets.findIndex(enemy => enemy.id === currentTarget?.id) : -1;
                 currentTarget = targets[(currentIndex + 1) % targets.length];
-                showToast(`Target selected: ${currentTarget.kind === 'boss' ? 'Grove Guardian' : 'Forest Wolf'}.`, 1.4);
+                showToast(`Target selected: ${currentTarget.displayName || (currentTarget.kind === 'boss' ? 'Boss' : 'Enemy')}.`, 1.4);
                 updateHUD();
             }
         }
@@ -2818,11 +3439,16 @@ window.addEventListener('keydown', event => {
 // Initial enemy/interactable setup and main render loop.
 // -----------------------------------------------------------------------------
 createInteractables();
-for (let i = 0; i < 3; i++)
-    addWolf([new Vector3(-5, 0, 8), new Vector3(0, 0, 3), new Vector3(6, 0, -3)][i]);
+createAllPrisonCrystals();
+ensureRegionEncounter('forest', true);
 updateHUD();
 void hasSave().then(found => { $('continue-button').disabled = !found; });
 let previousFrame = performance.now();
+window.addEventListener('pointerdown', event => {
+    if (!activeRescueCutscene) return;
+    event.preventDefault(); event.stopPropagation();
+    finishRescueCutscene(true);
+}, true);
 engine.runRenderLoop(() => {
     const now = performance.now();
     const dt = Math.min((now - previousFrame) / 1000, 0.05);
