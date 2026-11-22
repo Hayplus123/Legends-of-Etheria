@@ -384,6 +384,7 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
     // Arms, articulated-looking gloves and shoulder guards.
     const arms = [];
     const legs = [];
+    const gloves = [];
     for (const side of [-1, 1]) {
         const shoulder = MeshBuilder.CreateSphere(`${name}-pauldron`, { diameter: 0.5 * size, segments: 12 }, scene);
         shoulder.parent = root;
@@ -400,6 +401,7 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
         glove.parent = root;
         glove.position.set(side * 0.55 * size, 0.65 * size, 0.08 * size);
         glove.material = darkCloth;
+        gloves.push(glove);
         const leg = MeshBuilder.CreateCylinder(`${name}-leg`, { height: 0.72 * size, diameterTop: 0.26 * size, diameterBottom: 0.22 * size, tessellation: 10 }, scene);
         leg.parent = root;
         leg.position.set(side * 0.2 * size, 0.38 * size, 0.02 * size);
@@ -485,18 +487,18 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
     roleCrest.parent = root;
     roleCrest.position.set(0, 2.43 * size, -0.02 * size);
     roleCrest.material = weaponMaterial;
-    const model = { root, body, head, weapon, weaponRoot, staffRoot, staffCrystal, bowRoot, shield, arms, legs, cloak, role, roleCrest };
+    const model = { root, body, head, weapon, weaponRoot, staffRoot, staffCrystal, bowRoot, shield, arms, gloves, legs, cloak, role, roleCrest };
     setCharacterRole(model, role);
     return model;
 }
 function setCharacterRole(model, role) {
     model.role = role || 'warrior';
-    const usesStaff = model.role === 'mage' || model.role === 'healer';
+    const usesStaff = model.role === 'mage' || model.role === 'healer' || model.role === 'summoner';
     model.weaponRoot.setEnabled(!usesStaff && model.role !== 'ranger');
     model.staffRoot.setEnabled(usesStaff);
     model.bowRoot.setEnabled(model.role === 'ranger');
     model.shield.setEnabled(model.role === 'knight');
-    model.roleCrest.setEnabled(model.role === 'mage' || model.role === 'healer');
+    model.roleCrest.setEnabled(model.role === 'mage' || model.role === 'healer' || model.role === 'summoner');
     model.activeWeaponRoot = usesStaff ? model.staffRoot : model.role === 'ranger' ? model.bowRoot : model.weaponRoot;
     if (model.role === 'mage') {
         model.staffCrystal.material = materials.crystal;
@@ -504,6 +506,9 @@ function setCharacterRole(model, role) {
     } else if (model.role === 'healer') {
         model.staffCrystal.material = materials.heal;
         model.cloak.scaling.y = 1.32;
+    } else if (model.role === 'summoner') {
+        model.staffCrystal.material = materials.mireGlow;
+        model.cloak.scaling.y = 1.22;
     } else if (model.role === 'ranger') {
         model.cloak.scaling.y = 0.9;
     } else {
@@ -777,63 +782,79 @@ function makeInteractableMarker(position, color) {
 const FOREST_OFFSET = new Vector3(80, 0, 35);
 // The world remains one continuous map. The four new regions sit on the four routes
 // leading out from the Emerald Forest and the southern road from headquarters.
+const REGION_ORDER = ['forest', 'emberfall', 'frostveil', 'starfall', 'mire'];
 const REGION_DATA = {
     forest: {
-        id: 'forest', name: 'Emerald Forest', bossName: 'Grove Guardian', enemyName: 'Forest Wolf',
-        center: new Vector3(80, 0, 32), bounds: { minX: 42, maxX: 118, minZ: 2, maxZ: 62 },
-        bossPosition: new Vector3(80, 0, 11), cagePosition: new Vector3(80, 4.8, 4.5),
+        id: 'forest', name: 'Emerald Forest', bossName: 'Grove Guardian', enemyName: 'Forest Wolf', difficulty: 1,
+        requiredKills: 8, center: new Vector3(80, 0, -93), entryPosition: new Vector3(80, 0, 48),
+        bounds: { minX: 18, maxX: 162, minZ: -240, maxZ: 54 },
+        bossPosition: new Vector3(80, 0, -214), cagePosition: new Vector3(80, 4.8, -228),
+        dungeonPosition: new Vector3(108, 0, -92), dungeonRoomPosition: new Vector3(140, 0, -92),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.enemy, bossMaterial: materials.bark,
         crystalMaterial: materials.crystal, companionId: 'aurelia', rewardGold: 250, rewardXP: 300,
-        mobPositions: [new Vector3(-5, 0, 8), new Vector3(0, 0, 3), new Vector3(6, 0, -3)]
+        mobPositions: [
+            new Vector3(-10,0,2), new Vector3(11,0,-28), new Vector3(-13,0,-58), new Vector3(12,0,-88),
+            new Vector3(-11,0,-120), new Vector3(13,0,-151), new Vector3(-8,0,-181), new Vector3(3,0,-202)
+        ]
     },
     emberfall: {
-        id: 'emberfall', name: 'Emberfall Highlands', bossName: 'The Cinderheart Colossus', enemyName: 'Ashfang',
-        center: new Vector3(80, 0, -42), bounds: { minX: 42, maxX: 118, minZ: -80, maxZ: -4 },
-        bossPosition: new Vector3(80, 0, -61), cagePosition: new Vector3(80, 4.8, -68),
+        id: 'emberfall', name: 'Emberfall Highlands', bossName: 'The Cinderheart Colossus', enemyName: 'Ashfang', difficulty: 1.6,
+        requiredKills: 8, center: new Vector3(80, 0, -380), entryPosition: new Vector3(80,0,-248),
+        bounds: { minX: 18, maxX: 162, minZ: -520, maxZ: -241 },
+        bossPosition: new Vector3(80, 0, -494), cagePosition: new Vector3(80, 4.8, -508),
+        dungeonPosition: new Vector3(108,0,-380), dungeonRoomPosition: new Vector3(140,0,-380),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.emberGlow, bossMaterial: materials.emberGround,
         crystalMaterial: materials.emberGlow, companionId: 'darian', rewardGold: 360, rewardXP: 440,
-        mobPositions: [new Vector3(66, 0, -37), new Vector3(80, 0, -31), new Vector3(94, 0, -38)]
+        mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-272-i*25))
     },
     frostveil: {
-        id: 'frostveil', name: 'Frostveil Tundra', bossName: 'The Pale Glacier Wyrm', enemyName: 'Rime Stalker',
-        center: new Vector3(160, 0, 32), bounds: { minX: 122, maxX: 198, minZ: -6, maxZ: 70 },
-        bossPosition: new Vector3(180, 0, 32), cagePosition: new Vector3(187, 4.8, 32),
-        entryDirection: new Vector3(-1, 0, 0), enemyMaterial: materials.frostCrystal, bossMaterial: materials.frostGround,
+        id: 'frostveil', name: 'Frostveil Tundra', bossName: 'The Pale Glacier Wyrm', enemyName: 'Rime Stalker', difficulty: 2.25,
+        requiredKills: 8, center: new Vector3(80, 0, -660), entryPosition: new Vector3(80,0,-528),
+        bounds: { minX: 18, maxX: 162, minZ: -800, maxZ: -521 },
+        bossPosition: new Vector3(80, 0, -774), cagePosition: new Vector3(80, 4.8, -788),
+        dungeonPosition: new Vector3(108,0,-660), dungeonRoomPosition: new Vector3(140,0,-660),
+        entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.frostCrystal, bossMaterial: materials.frostGround,
         crystalMaterial: materials.frostCrystal, companionId: 'nyra', rewardGold: 420, rewardXP: 520,
-        mobPositions: [new Vector3(151, 0, 18), new Vector3(158, 0, 32), new Vector3(151, 0, 46)]
-    },
-    mire: {
-        id: 'mire', name: 'Sunken Mire', bossName: 'The Hollowfen Behemoth', enemyName: 'Mirebound',
-        center: new Vector3(0, 0, 32), bounds: { minX: -38, maxX: 38, minZ: -6, maxZ: 70 },
-        bossPosition: new Vector3(-20, 0, 32), cagePosition: new Vector3(-27, 4.8, 32),
-        entryDirection: new Vector3(1, 0, 0), enemyMaterial: materials.mireGlow, bossMaterial: materials.mireGround,
-        crystalMaterial: materials.mireGlow, companionId: 'rowan', rewardGold: 480, rewardXP: 600,
-        mobPositions: [new Vector3(29, 0, 18), new Vector3(22, 0, 32), new Vector3(29, 0, 46)]
+        mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-552-i*25))
     },
     starfall: {
-        id: 'starfall', name: 'Starfall Expanse', bossName: 'The Sunken Star Sentinel', enemyName: 'Dune Wraith',
-        center: new Vector3(80, 0, 170), bounds: { minX: 42, maxX: 118, minZ: 132, maxZ: 208 },
-        bossPosition: new Vector3(80, 0, 190), cagePosition: new Vector3(80, 4.8, 197),
-        entryDirection: new Vector3(0, 0, -1), enemyMaterial: materials.starCrystal, bossMaterial: materials.starGround,
+        id: 'starfall', name: 'Starfall Expanse', bossName: 'The Sunken Star Sentinel', enemyName: 'Dune Wraith', difficulty: 2.9,
+        requiredKills: 8, center: new Vector3(80, 0, -940), entryPosition: new Vector3(80,0,-808),
+        bounds: { minX: 18, maxX: 162, minZ: -1080, maxZ: -801 },
+        bossPosition: new Vector3(80, 0, -1054), cagePosition: new Vector3(80, 4.8, -1068),
+        dungeonPosition: new Vector3(108,0,-940), dungeonRoomPosition: new Vector3(140,0,-940),
+        entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.starCrystal, bossMaterial: materials.starGround,
         crystalMaterial: materials.starCrystal, companionId: 'seren', rewardGold: 560, rewardXP: 700,
-        mobPositions: [new Vector3(66, 0, 157), new Vector3(80, 0, 163), new Vector3(94, 0, 157)]
+        mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-832-i*25))
+    },
+    mire: {
+        id: 'mire', name: 'Sunken Mire', bossName: 'The Hollowfen Behemoth', enemyName: 'Mirebound', difficulty: 3.55,
+        requiredKills: 8, center: new Vector3(80, 0, -1220), entryPosition: new Vector3(80,0,-1088),
+        bounds: { minX: 18, maxX: 162, minZ: -1360, maxZ: -1081 },
+        bossPosition: new Vector3(80, 0, -1334), cagePosition: new Vector3(80, 4.8, -1348),
+        dungeonPosition: new Vector3(108,0,-1220), dungeonRoomPosition: new Vector3(140,0,-1220),
+        entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.mireGlow, bossMaterial: materials.mireGround,
+        crystalMaterial: materials.mireGlow, companionId: 'rowan', rewardGold: 640, rewardXP: 820,
+        mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-1112-i*25))
     }
 };
 function freshRegionProgress() {
-    return Object.fromEntries(Object.keys(REGION_DATA).map(id => [id, { kills: 0, bossUnlocked: false, bossDefeated: false, rescued: false }]));
+    return Object.fromEntries(Object.keys(REGION_DATA).map(id => [id, { kills: 0, elapsed: 0, ambushesTriggered: 0, bossUnlocked: false, bossDefeated: false, rescued: false, dungeonCleared: false }]));
 }
+const regionHazards = [];
+const dungeonLandmarks = [];
 const forestMeshStart = scene.meshes.length;
 const forestTransformStart = scene.transformNodes.length;
 const forestLightStart = scene.lights.length;
 
 // Two physical areas are laid out in the same 3D world: the home base and one forest region.
-const forestGround = MeshBuilder.CreateGround('emerald forest floor', { width: 74, height: 74, subdivisions: 3 }, scene);
+const forestGround = MeshBuilder.CreateGround('emerald forest floor', { width: 132, height: 300, subdivisions: 4 }, scene);
 forestGround.material = materials.grass;
-forestGround.position.set(0, 0.015, -3);
-forestGround.scaling.z = 0.78;
+forestGround.position.set(0, 0.015, -137);
+forestGround.scaling.z = 1;
 forestGround.receiveShadows = true;
-const forestPath = MeshBuilder.CreateGround('forest stone path', { width: 5.5, height: 48 }, scene);
-forestPath.position.set(0, 0.025, -5);
+const forestPath = MeshBuilder.CreateGround('forest stone path', { width: 7.2, height: 286, subdivisions: 3 }, scene);
+forestPath.position.set(0, 0.025, -137);
 forestPath.rotation.y = -0.12;
 forestPath.material = materials.path;
 forestPath.receiveShadows = true;
@@ -848,6 +869,14 @@ for (let i = 0; i < 40; i++) {
 }
 for (let i = 0; i < 28; i++)
     makeRock(Math.sin(i * 7.2) * (5 + (i % 4) * 2.4), Math.cos(i * 3.4) * (8 + (i % 3) * 3) - 2, 0.42 + (i % 4) * 0.16);
+// More woodland along the long trail so the first region feels like an expedition, not a small arena.
+for (let i = 0; i < 34; i++) {
+    const side = i % 2 ? 1 : -1;
+    const localZ = -18 - Math.floor(i / 2) * 13.2;
+    const x = side * (10.5 + (i % 4) * 2.3);
+    makeTree(x, localZ, 0.78 + (i % 4) * 0.1, i % 3);
+    if (i % 3 === 0) makeRock(x * 0.72, localZ - 4.5, 0.42 + (i % 3) * 0.12);
+}
 const forestCrystalMeshes = [makeCrystalMesh(-7.8, 4.5, 0.9), makeCrystalMesh(9.1, 1.8, 1.0), makeCrystalMesh(-10.5, -15.8, 0.75)];
 for (let i = 0; i < 4; i++) {
     const stone = MeshBuilder.CreateBox('ancient forest marker', { width: 0.65, height: 2.2 + i * 0.12, depth: 0.7 }, scene);
@@ -955,15 +984,15 @@ function makeWorldRoad(from, to, width = 5.2) {
 function buildAdditionalRegions() {
     const configs = [REGION_DATA.emberfall, REGION_DATA.frostveil, REGION_DATA.mire, REGION_DATA.starfall];
     for (const region of configs) {
-        const ground = MeshBuilder.CreateGround(`${region.name} terrain`, { width: 76, height: 76, subdivisions: 4 }, scene);
+        const ground = MeshBuilder.CreateGround(`${region.name} terrain`, { width: 144, height: 286, subdivisions: 4 }, scene);
         ground.position.copyFrom(region.center);
         ground.position.y = 0.012;
         ground.material = region.id === 'emberfall' ? materials.emberGround : region.id === 'frostveil' ? materials.frostGround : region.id === 'mire' ? materials.mireGround : materials.starGround;
         ground.receiveShadows = true;
-        const path = MeshBuilder.CreateGround(`${region.name} inner trail`, { width: 5.2, height: 55, subdivisions: 2 }, scene);
+        const path = MeshBuilder.CreateGround(`${region.name} inner trail`, { width: 7.2, height: 268, subdivisions: 3 }, scene);
         path.position.copyFrom(region.center);
         path.position.y = 0.045;
-        path.rotation.y = region.id === 'frostveil' ? Math.PI / 2 : region.id === 'mire' ? Math.PI / 2 : 0;
+        path.rotation.y = 0;
         path.material = region.id === 'frostveil' ? materials.frostCrystal : region.id === 'starfall' ? materials.paleStone : materials.path;
         path.receiveShadows = true;
 
@@ -1013,6 +1042,63 @@ function buildAdditionalRegions() {
                 }
             }
         }
+        // Scattered landmarks continue along the full trail, rather than clustering around the entry.
+        for (let trailIndex = 0; trailIndex < 16; trailIndex++) {
+            const trailZ = region.bounds.maxZ - 18 - trailIndex * 16.2;
+            const side = trailIndex % 2 ? 1 : -1;
+            const trailX = region.center.x + side * (13 + (trailIndex % 4) * 4.2);
+            if (region.id === 'emberfall') {
+                const basalt = MeshBuilder.CreatePolyhedron('Emberfall trail basalt', { type: 1, size: 0.9 + (trailIndex % 3) * 0.25 }, scene);
+                basalt.position.set(trailX, 0.8, trailZ); basalt.scaling.set(0.9, 1.8, 0.9); basalt.material = materials.bark;
+                if (trailIndex % 2 === 0) {
+                    const vent = MeshBuilder.CreateTorus('Emberfall hot ground vent', { diameter: 2.1, thickness: 0.12, tessellation: 24 }, scene);
+                    vent.position.set(trailX + side * 2.3, 0.12, trailZ - 3.5); vent.rotation.x = Math.PI / 2; vent.material = materials.emberGlow;
+                    regionHazards.push({ regionId: 'emberfall', position: new Vector3(trailX + side * 2.3,0,trailZ - 3.5), radius: 1.7, damagePerSecond: 5 });
+                }
+            } else if (region.id === 'frostveil') {
+                const shard = MeshBuilder.CreatePolyhedron('Frostveil trail ice spire', { type: 1, size: 0.8 + (trailIndex % 3) * 0.25 }, scene);
+                shard.position.set(trailX, 1.3, trailZ); shard.scaling.set(0.6, 2.0, 0.7); shard.material = materials.frostCrystal;
+            } else if (region.id === 'starfall') {
+                const ruin = MeshBuilder.CreateBox('Starfall trail ruin', { width: 1.2, height: 2.7 + (trailIndex % 3) * 0.55, depth: 1.0 }, scene);
+                ruin.position.set(trailX, ruin.scaling.y || 1.35, trailZ); ruin.rotation.z = side * 0.13; ruin.material = materials.paleStone;
+                if (trailIndex % 3 === 0) {
+                    const gem = MeshBuilder.CreatePolyhedron('Starfall trail sunstone', { type: 1, size: 0.5 }, scene);
+                    gem.position.set(trailX + side * 1.3, 1.4, trailZ); gem.material = materials.starCrystal; glowLayer.addIncludedOnlyMesh(gem);
+                }
+            } else {
+                const stump = MeshBuilder.CreateCylinder('Mire trail drowned stump', { height: 2.8, diameterTop: 0.38, diameterBottom: 0.9, tessellation: 8 }, scene);
+                stump.position.set(trailX, 1.4, trailZ); stump.material = materials.bark;
+                const wisp = MeshBuilder.CreateSphere('Mire trail wandering wisp', { diameter: 0.22, segments: 8 }, scene);
+                wisp.position.set(trailX + side * 1.2, 1.25, trailZ + 0.8); wisp.material = materials.mireGlow; glowLayer.addIncludedOnlyMesh(wisp);
+            }
+        }
+
+        // An optional side dungeon branches off the main road in every region.
+        const dungeonArchMaterial = region.crystalMaterial;
+        const dungeonX = region.dungeonPosition.x;
+        const dungeonZ = region.dungeonPosition.z;
+        for (const side of [-1, 1]) {
+            const pillar = MeshBuilder.CreateBox(`${region.name} dungeon gate pillar`, { width: 1.2, height: 4.2, depth: 1.2 }, scene);
+            pillar.position.set(dungeonX + side * 2.3, 2.1, dungeonZ); pillar.material = materials.stone; addShadow(pillar);
+            const rune = MeshBuilder.CreateTorus(`${region.name} dungeon gate rune`, { diameter: 0.8, thickness: 0.08, tessellation: 20 }, scene);
+            rune.position.set(dungeonX + side * 2.3, 2.3, dungeonZ + 0.68); rune.material = dungeonArchMaterial;
+        }
+        const dungeonLintel = MeshBuilder.CreateBox(`${region.name} dungeon lintel`, { width: 5.6, height: 0.75, depth: 1.0 }, scene);
+        dungeonLintel.position.set(dungeonX, 4.25, dungeonZ); dungeonLintel.material = materials.stone;
+        const dungeonPortal = MeshBuilder.CreateTorus(`${region.name} dungeon portal`, { diameter: 3.1, thickness: 0.16, tessellation: 32 }, scene);
+        dungeonPortal.position.set(dungeonX, 1.8, dungeonZ + 0.35); dungeonPortal.material = dungeonArchMaterial;
+        const dungeonRoom = MeshBuilder.CreateGround(`${region.name} dungeon chamber floor`, { width: 28, height: 28, subdivisions: 2 }, scene);
+        dungeonRoom.position.copyFrom(region.dungeonRoomPosition); dungeonRoom.position.y = 0.015; dungeonRoom.material = region.id === 'emberfall' ? materials.emberGround : region.id === 'frostveil' ? materials.frostGround : region.id === 'starfall' ? materials.starGround : materials.mireGround;
+        const roomMeshes = [dungeonRoom];
+        const wallMaterial = region.id === 'emberfall' ? materials.bark : region.id === 'frostveil' ? materials.frostCrystal : region.id === 'starfall' ? materials.paleStone : materials.mireGround;
+        for (const side of [-1,1]) {
+            const wall=MeshBuilder.CreateBox(`${region.name} dungeon chamber wall`,{width:0.7,height:6,depth:28},scene);
+            wall.position.set(region.dungeonRoomPosition.x+side*14,3,region.dungeonRoomPosition.z);wall.material=wallMaterial;roomMeshes.push(wall);
+            const endWall=MeshBuilder.CreateBox(`${region.name} dungeon rear wall`,{width:28,height:6,depth:0.7},scene);
+            endWall.position.set(region.dungeonRoomPosition.x,3,region.dungeonRoomPosition.z-side*14);endWall.material=wallMaterial;roomMeshes.push(endWall);
+        }
+        roomMeshes.forEach(mesh=>mesh.setEnabled(false));
+        dungeonLandmarks.push({ regionId: region.id, portal: dungeonPortal, room: dungeonRoom, roomMeshes, roomPosition: region.dungeonRoomPosition.clone() });
         // A recognisable landmark marks the entrance to each region.
         const archMat = region.id === 'emberfall' ? materials.emberGlow : region.id === 'frostveil' ? materials.frostCrystal : region.id === 'mire' ? materials.mireGlow : materials.starCrystal;
         for (const side of [-1, 1]) {
@@ -1021,31 +1107,29 @@ function buildAdditionalRegions() {
             pillar.material = archMat;
         }
     }
-    makeWorldRoad(new Vector3(80, 0, 3), new Vector3(80, 0, -4));
-    makeWorldRoad(new Vector3(117, 0, 32), new Vector3(123, 0, 32));
-    makeWorldRoad(new Vector3(43, 0, 32), new Vector3(37, 0, 32));
-    makeWorldRoad(new Vector3(80, 0, 104), new Vector3(80, 0, 133));
+    // One connected expedition route: Forest -> Emberfall -> Frostveil -> Starfall -> Mire.
+    for (const z of [-240, -520, -800, -1080]) makeWorldRoad(new Vector3(80,0,z+1), new Vector3(80,0,z-1), 7.2);
 }
 // The ancient grove gate frames the final encounter beyond the old path.
 for (const side of [-1, 1]) {
     const pillar = MeshBuilder.CreateBox('ancient grove gate pillar', { width: 1.0, height: 5.4, depth: 1.1 }, scene);
-    pillar.position.set(side * 4.1, 2.7, -23);
+    pillar.position.set(side * 4.1, 2.7, -217);
     pillar.material = materials.paleStone;
     addShadow(pillar);
     const capital = MeshBuilder.CreateCylinder('ancient gate capital', { height: 1.3, diameter: 1.55, tessellation: 6 }, scene);
-    capital.position.set(side * 4.1, 5.35, -23);
+    capital.position.set(side * 4.1, 5.35, -217);
     capital.rotation.y = Math.PI / 6;
     capital.material = materials.stone;
     const rune = MeshBuilder.CreateBox('gate rune', { width: 0.12, height: 1.8, depth: 0.04 }, scene);
-    rune.position.set(side * 4.1, 2.9, -22.42);
+    rune.position.set(side * 4.1, 2.9, -216.42);
     rune.material = materials.crystal;
     glowLayer.addIncludedOnlyMesh(rune);
 }
 const gateLintel = MeshBuilder.CreateBox('ancient grove gate lintel', { width: 9.2, height: 0.8, depth: 1.2 }, scene);
-gateLintel.position.set(0, 5.55, -23);
+gateLintel.position.set(0, 5.55, -217);
 gateLintel.material = materials.stone;
 const groveRune = MeshBuilder.CreateTorus('grove guardian rune', { diameter: 2.0, thickness: 0.1, tessellation: 32 }, scene);
-groveRune.position.set(0, 4.35, -22.35);
+groveRune.position.set(0, 4.35, -216.35);
 groveRune.material = materials.crystal;
 glowLayer.addIncludedOnlyMesh(groveRune);
 const fireflyMaterial = mat('soft green firefly light', new Color3(0.56, 0.94, 0.52), new Color3(0.3, 0.95, 0.35));
@@ -1094,16 +1178,15 @@ for (let i = 0; i < 16; i++) {
 // Main approach, stone well, supply crates and a training target make the headquarters feel inhabited.
 const baseApproach = MeshBuilder.CreateGround('base approach road', { width: 5.8, height: 23 }, scene);
 // A continuous stone road links the headquarters courtyard to the Emerald Forest clearing.
-const forestRoad = MeshBuilder.CreateGround('road to emerald forest', { width: 6.2, height: 108, subdivisions: 2 }, scene);
-forestRoad.position.set(80, 0.035, 55);
+const forestRoad = MeshBuilder.CreateGround('road to emerald forest', { width: 7.2, height: 42, subdivisions: 2 }, scene);
+forestRoad.position.set(80, 0.035, 57);
 forestRoad.rotation.y = 0;
-forestRoad.scaling.z = 0.36;
 forestRoad.material = materials.path;
 forestRoad.receiveShadows = true;
 for (let i = 0; i < 34; i++) {
     const t = i / 33;
     const x = 80 + Math.sin(t * Math.PI) * 0.65;
-    const z = 74 - t * 39;
+    const z = 75 - t * 25;
     const stone = MeshBuilder.CreateBox('roadside worn paving stone', { width: 1.05 + (i % 3) * 0.18, height: 0.13, depth: 0.72 }, scene);
     stone.position.set(x + Math.sin(i * 1.9) * 3.4, 0.12, z + Math.cos(i * 1.3) * 2.0);
     stone.rotation.y = Math.sin(i) * 0.12;
@@ -1189,7 +1272,7 @@ aureliaModel.root.setEnabled(false);
 // are planned with the player. Their recruitment is always gated behind their region boss.
 const darianModel = makeCharacter('Darian', mat('Darian emberguard armour', new Color3(0.52, 0.23, 0.15)), materials.emberGlow, 1.04, 'warrior');
 const nyraModel = makeCharacter('Nyra', mat('Nyra frostweave robes', new Color3(0.38, 0.57, 0.69)), materials.frostCrystal, 1, 'mage');
-const rowanModel = makeCharacter('Rowan', mat('Rowan mire scout cloak', new Color3(0.22, 0.34, 0.22)), materials.mireGlow, 1, 'ranger');
+const rowanModel = makeCharacter('Rowan', mat('Rowan mire summoner robes', new Color3(0.22, 0.34, 0.22)), materials.mireGlow, 1, 'summoner');
 const serenModel = makeCharacter('Seren', mat('Seren starfall robes', new Color3(0.57, 0.43, 0.24)), materials.starCrystal, 1, 'healer');
 [darianModel, nyraModel, rowanModel, serenModel].forEach(model => model.root.setEnabled(false));
 const guardianNPC = makeCharacter('Forest Guardian', mat('forest guardian cloak', new Color3(0.42, 0.48, 0.30)), materials.crystal, 1.02, 'mage');
@@ -1206,13 +1289,13 @@ guardianMarker.material = materials.gold;
 guardianNPC.root.setEnabled(false);
 guardianMarker.setEnabled(false);
 const companions = [
-    { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 95, maxHp: 95, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'darian', name: 'Darian', role: 'Warrior', model: darianModel, active: false, recruited: false, hp: 125, maxHp: 125, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'nyra', name: 'Nyra', role: 'Mage', model: nyraModel, active: false, recruited: false, hp: 88, maxHp: 88, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'rowan', name: 'Rowan', role: 'Ranger', model: rowanModel, active: false, recruited: false, hp: 100, maxHp: 100, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 },
-    { id: 'seren', name: 'Seren', role: 'Healer', model: serenModel, active: false, recruited: false, hp: 105, maxHp: 105, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0 }
+    { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 95, maxHp: 95, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'darian', name: 'Darian', role: 'Warrior', model: darianModel, active: false, recruited: false, hp: 125, maxHp: 125, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'nyra', name: 'Nyra', role: 'Mage', model: nyraModel, active: false, recruited: false, hp: 88, maxHp: 88, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'rowan', name: 'Rowan', role: 'Summoner', model: rowanModel, active: false, recruited: false, hp: 112, maxHp: 112, attackTimer: 0, healTimer: 0, summonTimer: 20, specialCooldown: 0, upgradeLevel: 0, recovering: false, recoverTimer: 0 },
+    { id: 'seren', name: 'Seren', role: 'Healer', model: serenModel, active: false, recruited: false, hp: 105, maxHp: 105, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 }
 ];
 for (const companion of companions) companion.model.root.metadata = { ...(companion.model.root.metadata || {}), companionId: companion.id };
 let selectedCompanion = null;
@@ -1222,7 +1305,8 @@ const state = {
     gold: 100, crystals: 0, tokens: 0, weaponLevel: 1, wolfKills: 0, bossUnlocked: false, bossDefeated: false,
     aureliaRecruited: false, formation: 'balanced', strategy: 'protect', command: 'follow',
     worldMinutes: 9 * 60, weatherIndex: 0, combatTimer: 0, attackCooldown: 0, defend: false,
-    defaultAbility: 'arcane', abilityCooldowns: { arcane: 0, heal: 0, nova: 0 },
+    defaultAbility: 'arcane', abilityCooldowns: { arcane: 0, heal: 0, nova: 0, barrier: 0, antiMagic: 0, deathBeam: 0 },
+    abilityLevels: { arcane: 1, heal: 1, nova: 1, barrier: 1, antiMagic: 1, deathBeam: 1 }, manaUpgradeLevel: 0, companionUpgradeLevels: {}, playerFrozenTimer: 0, dungeonState: null,
     crystalsCollected: new Set(), questComplete: false, nightSpawned: false, randomEventTimer: 0,
     regionProgress: freshRegionProgress(), cutsceneActive: false,
     playerDamageFlash: 0, stepTime: 0, protectionTimer: 0, lastSaveTime: 0
@@ -1237,6 +1321,8 @@ let inventoryFromPaused = false;
 let settingsFromPaused = false;
 let currentTarget = null;
 let enemies = [];
+let summonedAllies = [];
+let activeBarriers = [];
 let interactables = [];
 let projectiles = [];
 let enemyId = 0;
@@ -1245,6 +1331,7 @@ const prisonerCages = {};
 let activeRescueCutscene = null;
 let rescueCutsceneOverlay = null;
 const companionById = Object.fromEntries(companions.map(companion => [companion.id, companion]));
+for (const companion of companions) companion._baseMaxHp = companion.maxHp;
 
 function ensureRescueOverlay() {
     if (rescueCutsceneOverlay) return rescueCutsceneOverlay;
@@ -1352,6 +1439,7 @@ function finishRescueCutscene(skipped = false) {
     const { regionId, prison, cameraSnapshot, previousPaused } = cutscene;
     if (cutscene.frameHandle) cancelAnimationFrame(cutscene.frameHandle);
     if (cutscene.hand && !cutscene.hand.isDisposed()) cutscene.hand.dispose();
+    if (cutscene.touchSpark && !cutscene.touchSpark.isDisposed()) cutscene.touchSpark.dispose();
     for (const shard of prison.shards || []) if (shard && !shard.isDisposed()) shard.dispose();
     prison.shards = [];
     prison.root.setEnabled(false);
@@ -1377,9 +1465,16 @@ function finishRescueCutscene(skipped = false) {
     camera.inertia = cameraSnapshot.inertia;
     if (cutscene.heroRotation !== undefined) player.root.rotation.y = cutscene.heroRotation;
     if (cutscene.heroOriginalY !== undefined) player.root.position.y = cutscene.heroOriginalY;
-    if (player.arms && cutscene.armRotations) player.arms.forEach((arm, index) => arm.rotation.copyFrom(cutscene.armRotations[index]));
+    if (player.arms && cutscene.armRotations) player.arms.forEach((arm, index) => {
+        const saved = cutscene.armRotations[index];
+        if (saved?.rotation) arm.rotation.copyFrom(saved.rotation);
+        if (saved?.position) arm.position.copyFrom(saved.position);
+    });
+    if (player.gloves && cutscene.handPositions) player.gloves.forEach((glove, index) => {
+        if (cutscene.handPositions[index]) glove.position.copyFrom(cutscene.handPositions[index]);
+    });
     camera.attachControl(canvas, true);
-    if (camera.inputs.attached.pointers) camera.inputs.attached.pointers.buttons = [0, 1];
+    if (camera.inputs.attached.pointers) camera.inputs.attached.pointers.buttons = cameraSnapshot.pointerButtons || [0, 1];
     if (rescueCutsceneOverlay) rescueCutsceneOverlay.style.display = 'none';
     state.cutsceneActive = false;
     state.paused = previousPaused;
@@ -1389,12 +1484,20 @@ function finishRescueCutscene(skipped = false) {
     updatePrisonCrystalVisibility();
     updateZoneFromPosition();
     updateHUD();
+    const unlockMessages = {
+        emberfall: 'NEW ABILITY UNLOCKED: BARRIER',
+        frostveil: 'NEW ABILITY UNLOCKED: ANTI-MAGIC BARRIER',
+        starfall: 'NEW ABILITY UNLOCKED: DEATH BEAM',
+        mire: 'NEW COMPANION UNLOCKED: ROWAN THE SUMMONER'
+    };
     if (regionId === 'starfall') {
-        setObjective('A horizon beyond the stars', `${companion.name} is free, but the ancient seals point toward lands beyond Starfall. The journey is far from over.`);
+        setObjective('Beyond the Starfall Expanse', `${companion.name} is free. The road now leads into the Sunken Mire—and further lands remain beyond it.`);
+    } else if (regionId === 'mire') {
+        setObjective('The Mire is not the end', `${companion.name} is free. New routes are appearing beyond the known regions.`);
     } else {
-        setObjective(`${companion.name} rescued`, `${companion.name} has been freed from the ${region.name} crystal prison. You can manage the new companion at the planning table.`);
+        setObjective(`${companion.name} rescued`, `${companion.name} has been freed from the ${region.name} crystal prison. The next region is now open.`);
     }
-    showToast(`${companion.name} has been rescued and unlocked!`, 4.2);
+    showToast(`${companion.name} rescued! ${unlockMessages[regionId] || 'New region unlocked.'}`, 5.5);
     void saveGame(true);
 }
 
@@ -1421,14 +1524,19 @@ function beginRescueCutscene(regionId) {
         finishRegionBossProgress(regionId);
         return;
     }
-    const cameraSnapshot = { alpha: camera.alpha, beta: camera.beta, radius: camera.radius, target: camera.target.clone(), inertia: camera.inertia };
+    const cameraSnapshot = {
+        alpha: camera.alpha, beta: camera.beta, radius: camera.radius,
+        target: camera.target.clone(), inertia: camera.inertia,
+        pointerButtons: camera.inputs.attached.pointers?.buttons?.slice() || [0, 1]
+    };
     const previousPaused = state.paused;
     const walkStart = player.root.position.clone();
     const walkStartRotation = player.root.rotation.y;
     const heroRotation = player.root.rotation.y;
     const heroOriginalY = player.root.position.y;
-    const armRotations = player.arms ? player.arms.map(arm => arm.rotation.clone()) : [];
-    const stand = prison.root.position.add(region.entryDirection.scale(2.6));
+    const armRotations = player.arms ? player.arms.map(arm => ({ rotation: arm.rotation.clone(), position: arm.position.clone() })) : [];
+    const handPositions = player.gloves ? player.gloves.map(glove => glove.position.clone()) : [];
+    const stand = prison.root.position.add(region.entryDirection.scale(2.65));
     stand.y = 0;
     const facing = prison.root.position.subtract(stand);
     facing.y = 0;
@@ -1438,86 +1546,117 @@ function beginRescueCutscene(regionId) {
     state.cutsceneActive = true;
     state.defend = false;
     keys.clear();
+    prison.cracks.forEach(line => line.setEnabled(false));
     setRescueCaption(regionId, `${companionById[region.companionId].name} is still trapped`, 'The crystal prison hums with ancient magic.');
-    const hand = MeshBuilder.CreateSphere('rescue magic gathered in hero hand', { diameter: 0.24, segments: 12 }, scene);
+    const hand = MeshBuilder.CreateSphere('rescue magic gathered in hero hand', { diameter: 0.19, segments: 16 }, scene);
     hand.material = region.crystalMaterial;
     hand.isPickable = false;
-    activeRescueCutscene = { regionId, prison, cameraSnapshot, previousPaused, walkStart, walkStartRotation, heroRotation, armRotations, heroOriginalY, stand, desiredRotation, startTime: performance.now(), hand, shardsCreated: false, frameHandle: 0 };
+    glowLayer.addIncludedOnlyMesh(hand);
+    const touchSpark = MeshBuilder.CreateSphere('crystal touch point', { diameter: 0.12, segments: 12 }, scene);
+    touchSpark.material = region.crystalMaterial;
+    touchSpark.isPickable = false;
+    glowLayer.addIncludedOnlyMesh(touchSpark);
+    activeRescueCutscene = {
+        regionId, prison, cameraSnapshot, previousPaused, walkStart, walkStartRotation,
+        heroRotation, armRotations, handPositions, heroOriginalY, stand, desiredRotation,
+        startTime: performance.now(), hand, touchSpark, shardsCreated: false, frameHandle: 0
+    };
     const lerpAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
+    const smooth = t => { t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
     const tick = now => {
         const c = activeRescueCutscene;
         if (!c) return;
         const elapsed = now - c.startTime;
-        const walkT = Math.min(1, elapsed / 1600);
-        const smoothWalk = walkT * walkT * (3 - 2 * walkT);
-        player.root.position.copyFrom(Vector3.Lerp(c.walkStart, c.stand, smoothWalk));
-        if (elapsed >= 1600) {
-            const lift = Math.min(1, (elapsed - 1600) / 700);
-            player.root.position.y = c.heroOriginalY + 2.6 * (lift * lift * (3 - 2 * lift));
-        }
-        player.root.rotation.y = lerpAngle(c.walkStartRotation, c.desiredRotation, smoothWalk);
-        animateCharacterMovement(player, elapsed < 1500, elapsed / 1000);
+        // 0–5.5s: walk slowly into position. No supernatural jump; the hand reaches upward.
+        const walkT = smooth(elapsed / 5500);
+        player.root.position.copyFrom(Vector3.Lerp(c.walkStart, c.stand, walkT));
+        player.root.position.y = c.heroOriginalY;
+        player.root.rotation.y = lerpAngle(c.walkStartRotation, c.desiredRotation, smooth(elapsed / 4300));
+        animateCharacterMovement(player, elapsed < 5200, elapsed / 1000);
         player.root.computeWorldMatrix(true);
-        const handWorld = Vector3.TransformCoordinates(new Vector3(0.55, 0.68, 0.96), player.root.getWorldMatrix());
-        c.hand.position.copyFrom(handWorld);
-        const cameraTargetWalk = player.root.position.add(new Vector3(0, 1.15, 0));
-        if (elapsed < 2300) {
-            camera.alpha = lerpAngle(cameraSnapshot.alpha, desiredRotation + Math.PI, Math.min(1, elapsed / 1800));
-            camera.beta = cameraSnapshot.beta + (1.15 - cameraSnapshot.beta) * Math.min(1, elapsed / 2000);
-            camera.radius = cameraSnapshot.radius + (5.8 - cameraSnapshot.radius) * Math.min(1, elapsed / 2000);
-            camera.target = Vector3.Lerp(camera.target, cameraTargetWalk, 0.12);
-            if (elapsed > 1200) setRescueCaption(regionId, 'A final touch of magic', `${companionById[region.companionId].name} is almost free.`);
-        } else if (elapsed < 3100) {
-            const t = Math.min(1, (elapsed - 2300) / 800);
-            camera.alpha = lerpAngle(camera.alpha, desiredRotation + Math.PI, 0.16);
-            camera.beta = 1.26;
-            camera.radius += (2.65 - camera.radius) * 0.12;
-            camera.target = Vector3.Lerp(camera.target, handWorld, 0.14);
-            if (player.arms?.[1]) player.arms[1].rotation.x = -0.35 - 0.95 * Math.sin(t * Math.PI / 2);
-            if (player.arms?.[1]) player.arms[1].rotation.z = 0.3;
-            c.hand.scaling.setAll(0.7 + t * 1.7);
-            if (elapsed > 2550) setRescueCaption(regionId, 'The seal begins to crack', 'Magic flows from your hands into the crystal.');
-        } else if (elapsed < 4300) {
-            const t = Math.min(1, (elapsed - 3100) / 1200);
-            camera.radius += (2.35 - camera.radius) * 0.08;
-            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.1);
-            const visibleCount = Math.min(prison.cracks.length, Math.floor(t * (prison.cracks.length + 1)));
-            prison.cracks.forEach((line, index) => line.setEnabled(index < visibleCount));
-            c.hand.scaling.setAll(1.2 + Math.sin(elapsed * 0.02) * 0.22);
-            if (elapsed > 3400) setRescueCaption(regionId, 'Fractures spread across the prison', 'The ancient crystal can no longer contain its prisoner.');
-        } else if (elapsed < 5350) {
+        const handWorld = Vector3.TransformCoordinates(new Vector3(0.55, 1.72, 0.94), player.root.getWorldMatrix());
+        const crystalWorld = prison.crystal.getAbsolutePosition();
+        const touchPoint = Vector3.Lerp(handWorld, crystalWorld, 0.28);
+        c.hand.position.copyFrom(touchPoint);
+        c.touchSpark.position.copyFrom(touchPoint);
+        const heroTarget = player.root.position.add(new Vector3(0, 1.35, 0));
+        const handTarget = Vector3.Lerp(touchPoint, crystalWorld, 0.22);
+
+        if (elapsed < 5500) {
+            camera.alpha = lerpAngle(cameraSnapshot.alpha, c.desiredRotation + Math.PI, smooth(elapsed / 3600));
+            camera.beta = cameraSnapshot.beta + (1.16 - cameraSnapshot.beta) * smooth(elapsed / 4200);
+            camera.radius = cameraSnapshot.radius + (6.6 - cameraSnapshot.radius) * smooth(elapsed / 4200);
+            camera.target = Vector3.Lerp(cameraSnapshot.target, heroTarget, smooth(elapsed / 4500));
+            if (elapsed > 2800) setRescueCaption(regionId, 'The hero approaches', 'The crystal pulses as you draw near.');
+        } else if (elapsed < 8200) {
+            const t = smooth((elapsed - 5500) / 2700);
+            camera.alpha = lerpAngle(camera.alpha, c.desiredRotation + Math.PI, 0.12);
+            camera.beta += (1.23 - camera.beta) * 0.10;
+            camera.radius += (4.15 - camera.radius) * 0.085;
+            camera.target = Vector3.Lerp(camera.target, handTarget, 0.10);
+            if (player.arms?.[1]) {
+                player.arms[1].position.set(0.51, 1.03 + 0.58 * t, 0.03 + 0.42 * t);
+                player.arms[1].rotation.x = -0.25 - 0.72 * t;
+                player.arms[1].rotation.z = 0.18 + 0.10 * t;
+            }
+            if (player.gloves?.[1]) player.gloves[1].position.set(0.55, 0.65 + 1.58 * t, 0.08 + 1.22 * t);
+            c.hand.scaling.setAll(0.65 + t * 0.5);
+            setRescueCaption(regionId, 'A hand against the crystal', 'Magic gathers where the hero touches the prison.');
+        } else if (elapsed < 11800) {
+            // Hold the close-up on the touching hand. The crystal remains completely intact.
+            camera.alpha = lerpAngle(camera.alpha, c.desiredRotation + Math.PI, 0.075);
+            camera.beta += (1.26 - camera.beta) * 0.06;
+            camera.radius += (2.25 - camera.radius) * 0.055;
+            camera.target = Vector3.Lerp(camera.target, handTarget, 0.07);
+            if (player.arms?.[1]) player.arms[1].position.set(0.51, 1.61, 0.45);
+            if (player.gloves?.[1]) player.gloves[1].position.set(0.55, 2.23, 1.30);
+            c.hand.scaling.setAll(1.05 + Math.sin(elapsed * 0.004) * 0.07);
+            c.touchSpark.scaling.setAll(1 + Math.sin(elapsed * 0.006) * 0.18);
+            setRescueCaption(regionId, 'The seal answers', 'A quiet pulse spreads from the hero’s hand.');
+        } else if (elapsed < 17700) {
+            // Only now does the first fracture begin to form, slowly spreading line by line.
+            const t = smooth((elapsed - 11800) / 5900);
+            camera.radius += (2.55 - camera.radius) * 0.035;
+            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.045);
+            const count = Math.min(prison.cracks.length, Math.floor(t * (prison.cracks.length + 0.99)));
+            prison.cracks.forEach((line, index) => line.setEnabled(index < count));
+            c.hand.scaling.setAll(1.0 + Math.sin(elapsed * 0.003) * 0.05);
+            setRescueCaption(regionId, 'A fracture appears', 'A thin crack crawls through the crystal.');
+        } else if (elapsed < 20500) {
+            // Hold on the fully cracked prison for suspense before the break.
             prison.cracks.forEach(line => line.setEnabled(true));
-            camera.radius += (2.7 - camera.radius) * 0.04;
-            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.08);
-            c.hand.scaling.setAll(1.25);
-            if (elapsed > 4400) setRescueCaption(regionId, 'The crystal is breaking', '');
-        } else if (elapsed < 6400) {
+            camera.radius += (2.75 - camera.radius) * 0.025;
+            camera.target = Vector3.Lerp(camera.target, prison.root.getAbsolutePosition(), 0.035);
+            setRescueCaption(regionId, 'The crystal is covered in cracks', 'The prison shudders. One final pulse remains.');
+        } else if (elapsed < 24500) {
             if (!c.shardsCreated) { createPrisonShards(prison); c.shardsCreated = true; }
-            const t = Math.min(1, (elapsed - 5350) / 1050);
+            const t = smooth((elapsed - 20500) / 4000);
             for (let i = 0; i < prison.shards.length; i++) {
                 const shard = prison.shards[i];
                 const a = i * 2.399;
-                shard.position.x += Math.cos(a) * 0.055;
-                shard.position.y += (0.035 + (i % 4) * 0.012);
-                shard.position.z += Math.sin(a) * 0.055;
-                shard.rotation.x += 0.045;
-                shard.rotation.y += 0.035;
+                shard.position.x += Math.cos(a) * (0.018 + (i % 3) * 0.007);
+                shard.position.y -= 0.012 + (i % 4) * 0.003;
+                shard.position.z += Math.sin(a) * (0.018 + (i % 3) * 0.007);
+                shard.rotation.x += 0.018;
+                shard.rotation.y += 0.014;
                 shard.visibility = 1 - t;
             }
             c.hand.visibility = 1 - t;
-            if (elapsed > 5600) setRescueCaption(regionId, `${companionById[region.companionId].name} is free`, 'The crystal prison bursts apart.');
+            c.touchSpark.visibility = 1 - t;
+            setRescueCaption(regionId, `${companionById[region.companionId].name} is free`, 'The crystal finally bursts into falling shards.');
         } else {
-            const t = Math.min(1, (elapsed - 6400) / 900);
-            camera.alpha = lerpAngle(camera.alpha, cameraSnapshot.alpha, 0.09);
-            camera.beta += (cameraSnapshot.beta - camera.beta) * 0.09;
-            camera.radius += (cameraSnapshot.radius - camera.radius) * 0.09;
-            camera.target = Vector3.Lerp(camera.target, player.root.position.add(new Vector3(0, 1.2, 0)), 0.09);
-            if (t >= 1 || elapsed > 7600) { finishRescueCutscene(false); return; }
+            const t = smooth((elapsed - 24500) / 3000);
+            camera.alpha = lerpAngle(camera.alpha, cameraSnapshot.alpha, 0.065);
+            camera.beta += (cameraSnapshot.beta - camera.beta) * 0.065;
+            camera.radius += (cameraSnapshot.radius - camera.radius) * 0.065;
+            camera.target = Vector3.Lerp(camera.target, player.root.position.add(new Vector3(0, 1.2, 0)), 0.065);
+            if (t >= 0.995 || elapsed > 27600) { finishRescueCutscene(false); return; }
         }
         c.frameHandle = requestAnimationFrame(tick);
     };
     activeRescueCutscene.frameHandle = requestAnimationFrame(tick);
 }
+
 
 function finishRegionBossProgress(regionId) {
     const region = REGION_DATA[regionId];
@@ -1525,14 +1664,12 @@ function finishRegionBossProgress(regionId) {
     if (!region || !progress) return;
     progress.bossDefeated = true;
     progress.bossUnlocked = true;
+    // This fallback is only for a missing prison object. Normal boss defeats
+    // must finish the visible rescue cutscene before the next region unlocks.
     progress.rescued = true;
-    if (regionId === 'forest') {
-        state.bossDefeated = true;
-        state.questComplete = true;
-        state.aureliaRecruited = true;
-    }
     const companion = companionById[region.companionId];
     if (companion) { companion.recruited = true; companion.active = regionId === 'forest' || activeCompanions().length < 3; }
+    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = true; }
     updatePrisonCrystalVisibility();
     updateHUD();
     void saveGame(true);
@@ -1549,6 +1686,9 @@ function createInteractables() {
         { kind: 'crystal', label: 'Collect Ether crystal', position: new Vector3(9.1, 0, 1.8).add(FOREST_OFFSET), mesh: forestCrystalMeshes[1] },
         { kind: 'crystal', label: 'Collect Ether crystal', position: new Vector3(-10.5, 0, -15.8).add(FOREST_OFFSET), mesh: forestCrystalMeshes[2] }
     ];
+    for (const landmark of dungeonLandmarks) {
+        interactables.push({ kind: 'dungeon', regionId: landmark.regionId, label: `Enter ${REGION_DATA[landmark.regionId].name} Dungeon`, position: REGION_DATA[landmark.regionId].dungeonPosition.clone(), mesh: landmark.portal });
+    }
 }
 function addWolf(position, stronger = false) {
     const root = new TransformNode(`wolf-${++enemyId}`, scene);
@@ -1617,13 +1757,13 @@ tail.material = body.material;
     ring.position.y = 0.06;
     ring.rotation.x = Math.PI / 2;
     ring.material = mat('wolf hostile ring', new Color3(0.75, 0.27, 0.18), new Color3(0.25, 0.05, 0.02));
-    const enemy = { id: enemyId, kind: 'wolf', regionId: 'forest', displayName: stronger ? 'Grove Stalker' : 'Forest Wolf', root, body, hp: stronger ? 95 : 70, maxHp: stronger ? 95 : 70, speed: stronger ? 2.0 : 1.65, damage: stronger ? 13 : 9, attackTimer: 1.2, specialTimer: 0, dead: false, sightRadius: stronger ? 30 : 24, detectionRange: stronger ? 16 : 14, aggro: stronger ? 16 : 14, frozenTimer: 0, frozenMeshes: null };
+    const enemy = { id: enemyId, kind: 'wolf', regionId: 'forest', displayName: stronger ? 'Grove Stalker' : 'Forest Wolf', root, body, hp: stronger ? 155 : 112, maxHp: stronger ? 155 : 112, speed: stronger ? 2.25 : 1.85, damage: stronger ? 17 : 13, attackTimer: 1.15, specialTimer: 0, dead: false, sightRadius: stronger ? 40 : 34, detectionRange: stronger ? 23 : 20, aggro: stronger ? 23 : 20, frozenTimer: 0, frozenMeshes: null };
     enemies.push(enemy);
     return enemy;
 }
 function addBoss() {
     const root = new TransformNode('grove guardian boss', scene);
-    root.position.copyFrom(new Vector3(0, 0, -24).add(FOREST_OFFSET));
+    root.position.copyFrom(REGION_DATA.forest.bossPosition);
     const body = MeshBuilder.CreateSphere('grove guardian body', { diameter: 3.2, segments: 10 }, scene);
     body.parent = root;
     body.position.y = 1.45;
@@ -1678,14 +1818,14 @@ function addBoss() {
     aura.position.y = 0.12;
     aura.rotation.x = Math.PI / 2;
     aura.material = mat('boss aura', new Color3(0.61, 0.24, 0.15), new Color3(0.25, 0.04, 0.02));
-    const boss = { id: ++enemyId, kind: 'boss', regionId: 'forest', displayName: REGION_DATA.forest.bossName, root, body, hp: 520, maxHp: 520, speed: 1.35, damage: 17, attackTimer: 1.8, specialTimer: 5, dead: false, sightRadius: 40, detectionRange: 22, aggro: 22, frozenTimer: 0, frozenMeshes: null };
+    const boss = { id: ++enemyId, kind: 'boss', regionId: 'forest', displayName: REGION_DATA.forest.bossName, root, body, hp: 980, maxHp: 980, speed: 1.58, damage: 25, attackTimer: 1.65, specialTimer: 15, dead: false, sightRadius: 58, detectionRange: 34, aggro: 34, frozenTimer: 0, frozenMeshes: null };
     enemies.push(boss);
     showToast('The Grove Guardian has awakened. Prepare for a boss battle!');
     setObjective('Defeat the Grove Guardian', 'The forest guardian is corrupted. Coordinate your party and use your abilities.');
     return boss;
 }
 
-function addRegionalEnemy(regionId, position, index = 0) {
+function addRegionalEnemy(regionId, position, index = 0, dungeonOnly = false) {
     const region = REGION_DATA[regionId];
     const root = new TransformNode(`${regionId} enemy ${++enemyId}`, scene);
     root.position.copyFrom(position);
@@ -1721,7 +1861,9 @@ function addRegionalEnemy(regionId, position, index = 0) {
     targetRing.position.y = 0.07;
     targetRing.rotation.x = Math.PI / 2;
     targetRing.material = materials.enemyEye;
-    const enemy = { id: enemyId, kind: 'regional', regionId, displayName: region.enemyName, root, body, hp: 115 + index * 8, maxHp: 115 + index * 8, speed: 1.75 + (index % 2) * 0.12, damage: 12 + index, attackTimer: 1.1, specialTimer: 0, dead: false, sightRadius: 31, detectionRange: 18, aggro: 18, frozenTimer: 0, frozenMeshes: null };
+    const difficulty = region.difficulty || 1;
+    const enemyHP = Math.round(165 + difficulty * 52 + index * 12);
+    const enemy = { id: enemyId, kind: 'regional', regionId, displayName: region.enemyName, root, body, hp: enemyHP, maxHp: enemyHP, speed: 1.82 + Math.min(0.7, difficulty * 0.12) + (index % 2) * 0.12, damage: Math.round(17 + difficulty * 5 + index * 0.8), attackTimer: 1.1, specialTimer: 0, dead: false, sightRadius: 38 + difficulty * 2, detectionRange: 22 + difficulty * 1.5, aggro: 22 + difficulty * 1.5, frozenTimer: 0, frozenMeshes: null, dungeonOnly };
     enemies.push(enemy);
     return enemy;
 }
@@ -1767,7 +1909,9 @@ function addRegionalBoss(regionId) {
     aura.position.y = 0.14;
     aura.rotation.x = Math.PI / 2;
     aura.material = region.crystalMaterial;
-    const boss = { id: ++enemyId, kind: 'boss', regionId, displayName: region.bossName, root, body, hp: 820, maxHp: 820, speed: 1.42, damage: 21, attackTimer: 1.7, specialTimer: 4.5, dead: false, sightRadius: 46, detectionRange: 25, aggro: 25, frozenTimer: 0, frozenMeshes: null };
+    const difficulty = region.difficulty || 1;
+    const bossHP = Math.round(1000 + difficulty * 480);
+    const boss = { id: ++enemyId, kind: 'boss', regionId, displayName: region.bossName, root, body, hp: bossHP, maxHp: bossHP, speed: 1.48 + difficulty * 0.08, damage: Math.round(25 + difficulty * 6), attackTimer: 1.55, specialTimer: 15, dead: false, sightRadius: 58, detectionRange: 34, aggro: 34, frozenTimer: 0, frozenMeshes: null };
     enemies.push(boss);
     showToast(`${region.bossName} has awakened!`, 4);
     setObjective(`Defeat ${region.bossName}`, `The boss of ${region.name} guards a crystal prison. Defeat it to free the trapped companion.`);
@@ -1782,17 +1926,249 @@ function ensureRegionEncounter(regionId, rebuild = false) {
     if (rebuild) spawnedRegions.delete(regionId);
     if (spawnedRegions.has(regionId)) return;
     spawnedRegions.add(regionId);
-    const remaining = Math.max(0, 3 - progress.kills);
+    const remaining = Math.max(0, getRequiredKills(regionId) - progress.kills);
     for (let i = 0; i < remaining; i++) {
         if (regionId === 'forest') addWolf(region.mobPositions[i] || region.mobPositions[0]);
         else addRegionalEnemy(regionId, region.mobPositions[i] || region.center, i);
     }
-    if (progress.bossUnlocked) {
+    if (progress.bossUnlocked && !progress.bossDefeated) {
         if (regionId === 'forest') addBoss();
         else addRegionalBoss(regionId);
     }
 }
 
+function isRegionUnlocked(regionId) {
+    const index = REGION_ORDER.indexOf(regionId);
+    if (index < 0) return regionId === 'base';
+    if (index === 0) return true;
+    const previous = REGION_ORDER[index - 1];
+    return !!state.regionProgress[previous]?.rescued;
+}
+function getMaxMana() { return 80 + (state.level - 1) * 8 + (state.manaUpgradeLevel || 0) * 20; }
+
+function applyEnvironmentalHazards(dt) {
+    if (state.zone !== 'emberfall' || !regionHazards.length) return;
+    const damageTarget = (root, companion = null) => {
+        const hazard = regionHazards.find(h => h.regionId === 'emberfall' && distance(root.position, h.position) <= h.radius + 0.35);
+        if (!hazard || hasActiveBarrierFor(root, false)) return;
+        const amount = hazard.damagePerSecond * dt; // Fire vents deal only 5 HP per second.
+        if (companion) {
+            companion.hp = Math.max(0, companion.hp - amount);
+            if (companion.hp <= 0 && !companion.recovering) {
+                companion.recovering = true; companion.recoverTimer = 7;
+                companion.model.root.setEnabled(false);
+                showToast(`${companion.name} was burned and needs time to recover.`);
+            }
+        } else {
+            state.hp = Math.max(0, state.hp - amount);
+            state.playerDamageFlash = Math.max(state.playerDamageFlash, 0.06);
+            if (state.hp <= 0) playerDefeated();
+        }
+    };
+    damageTarget(player.root);
+    for (const c of activeCompanions()) damageTarget(c.model.root, c);
+}
+
+function hasActiveBarrierFor(root, antiMagicOnly = false) {
+    return activeBarriers.find(field => !field.broken && field.timeLeft > 0 &&
+        (!antiMagicOnly || field.antiMagic) && distance(root.position, player.root.position) <= field.radius + 1.05) || null;
+}
+
+function updateBarrierCracks(field) {
+    const ratio = field.hp / field.maxHp;
+    field.cracks.forEach((crack, index) => crack.setEnabled(ratio <= 0.5 && (ratio > 0.25 ? index < 3 : true)));
+    if (field.shellMaterial) {
+        field.shellMaterial.alpha = ratio <= 0.25 ? 0.08 : ratio <= 0.5 ? 0.13 : 0.2;
+        field.shellMaterial.emissiveColor = ratio <= 0.25 ? new Color3(0.1,0.25,0.62) : new Color3(0.08,0.38,0.78);
+    }
+}
+
+function breakBarrier(field) {
+    if (!field || field.broken) return;
+    field.broken = true;
+    const center = player.root.position.clone();
+    for (let i = 0; i < 18; i++) {
+        const shard = MeshBuilder.CreatePolyhedron('barrier shattered blue shard', { type: 1, size: 0.16 + (i % 4) * 0.045 }, scene);
+        const angle = i * 2.399;
+        shard.position.set(center.x + Math.cos(angle) * (2 + (i % 4) * 1.3), 0.5 + (i % 5) * 0.35, center.z + Math.sin(angle) * (2 + (i % 4) * 1.3));
+        shard.material = field.shardMaterial;
+        field.shards.push({ mesh: shard, velocity: new Vector3(Math.cos(angle)*1.8, 1.8 + (i%3)*0.45, Math.sin(angle)*1.8) });
+    }
+    if (field.root && !field.root.isDisposed()) field.root.dispose();
+    showToast(field.antiMagic ? 'Anti-Magic Barrier shattered!' : 'Barrier shattered! Its blue shards rain down.', 3.5);
+}
+
+function createProtectionField(antiMagic = false) {
+    const id = antiMagic ? 'antiMagic' : 'barrier';
+    if (!isAbilityUnlocked(id)) { showToast('This ability has not been unlocked yet.'); return; }
+    const level = Math.max(1, Number(state.abilityLevels[id]) || 1);
+    for (let i=activeBarriers.length-1;i>=0;i--) {
+        const previous=activeBarriers[i];
+        if(previous.id===id&&!previous.broken){if(previous.root&&!previous.root.isDisposed())previous.root.dispose();if(previous.shellMaterial)previous.shellMaterial.dispose();if(previous.shardMaterial)previous.shardMaterial.dispose();activeBarriers.splice(i,1);}
+    }
+    const maxHp = antiMagic ? 50 + (level - 1) * 8 : 100 + (level - 1) * 12;
+    const duration = antiMagic ? Math.min(25, 15 + (level - 1) * 1.1) : Math.min(30, 20 + (level - 1) * 1.2);
+    const radius = antiMagic ? 15 : 10;
+    const cost = antiMagic ? 88 : 58;
+    if (state.mana < cost) { showToast(`This barrier requires ${cost} MP.`); return; }
+    state.mana -= cost;
+    const root = new TransformNode(antiMagic ? 'anti-magic shield field' : 'protective barrier field', scene);
+    root.parent = player.root;
+    root.position.set(0, 0, 0);
+    const color = antiMagic ? new Color3(0.25,0.56,1) : new Color3(0.1,0.58,1);
+    const shellMaterial = new StandardMaterial(`${id} field shell material`, scene);
+    shellMaterial.diffuseColor = color.clone(); shellMaterial.emissiveColor = color.scale(0.35);
+    shellMaterial.alpha = 0.2; shellMaterial.backFaceCulling = false; shellMaterial.wireframe = false;
+    const shell = MeshBuilder.CreateSphere(`${id} translucent spherical shield`, { diameter: radius * 2, segments: 32 }, scene);
+    shell.parent = root; shell.position.y = radius * 0.48; shell.scaling.y = 0.88; shell.material = shellMaterial; shell.isPickable = false;
+    const ring = MeshBuilder.CreateTorus(`${id} perimeter ring`, { diameter: radius * 2, thickness: 0.085, tessellation: 64 }, scene);
+    ring.parent = root; ring.position.y = 0.08; ring.rotation.x = Math.PI / 2; ring.material = shellMaterial; ring.isPickable = false;
+    const shardMaterial = new StandardMaterial(`${id} crystal shard material`, scene);
+    shardMaterial.diffuseColor = color.clone(); shardMaterial.emissiveColor = color.scale(0.8);
+    const cracks=[];
+    for(let i=0;i<8;i++){
+        const angle=i*Math.PI/4;
+        const points=[new Vector3(0,radius*0.22, radius*0.91),new Vector3(Math.cos(angle)*0.6,radius*0.42, radius*0.72),new Vector3(Math.cos(angle)*1.35,radius*0.5, radius*0.46)];
+        const line=MeshBuilder.CreateLines(`${id} barrier crack ${i}`,{points},scene);line.parent=root;line.color=new Color3(0.8,0.95,1);line.isPickable=false;line.setEnabled(false);cracks.push(line);
+    }
+    const beams=[];
+    for(let i=0;i<8;i++){
+        const a=i*Math.PI/4;
+        const beam=MeshBuilder.CreateCylinder(`${id} blue boundary beam`,{height:radius*1.05,diameter:0.12,tessellation:8},scene);
+        beam.parent=root;beam.position.set(Math.cos(a)*radius, radius*0.52, Math.sin(a)*radius);beam.material=shellMaterial;beam.isPickable=false;beams.push(beam);
+    }
+    const field={id,antiMagic,root,shell,ring,shellMaterial,cracks,beams,shardMaterial,shards:[],maxHp,hp:maxHp,radius,duration,timeLeft:duration,broken:false};
+    activeBarriers.push(field);
+    drawMagicGlyph(player.root.position.add(new Vector3(0,0.06,0)),color,{floor:true,size:radius*0.72,duration:1100});
+    showToast(antiMagic ? 'Anti-Magic Barrier raised! Enemy magic is suppressed while it holds.' : 'Barrier raised! Stay inside the blue field.',4);
+    state.abilityCooldowns[id]=antiMagic?22:18;
+    updateHUD();
+}
+
+function updateBarrierFields(dt) {
+    for(let i=activeBarriers.length-1;i>=0;i--){
+        const field=activeBarriers[i];
+        if(field.broken){
+            for(let j=field.shards.length-1;j>=0;j--){const sh=field.shards[j];sh.mesh.position.addInPlace(sh.velocity.scale(dt));sh.velocity.y-=9.8*dt;sh.mesh.rotation.x+=dt*3;sh.mesh.rotation.z+=dt*2;if(sh.mesh.position.y<=0){sh.mesh.dispose();field.shards.splice(j,1);}}
+            if(!field.shards.length){field.shardMaterial.dispose();activeBarriers.splice(i,1);}continue;
+        }
+        field.timeLeft-=dt;
+        if(field.timeLeft<=0||field.hp<=0){breakBarrier(field);continue;}
+        field.root.position.set(0,0,0);
+        const t=performance.now()*0.001;
+        field.beams.forEach((b,j)=>{b.scaling.y=1+Math.sin(t*2+j)*0.035;});
+        updateBarrierCracks(field);
+        // Hostile creatures are pushed against the shield edge and damage its integrity.
+        for(const enemy of enemies){
+            if(enemy.dead||!enemy.root.isEnabled()||distance(enemy.root.position,player.root.position)>field.radius+1.1)continue;
+            const delta=enemy.root.position.subtract(player.root.position);delta.y=0;
+            if(delta.lengthSquared()<0.01)delta.x=1;
+            delta.normalize();
+            enemy.root.position.copyFrom(player.root.position.add(delta.scale(field.radius+1.25)));
+            field.hp=Math.max(0,field.hp-(enemy.kind==='boss'?5:2.5)*dt);
+        }
+    }
+}
+
+function triggerBossSpecial(enemy) {
+    const regionId=enemy.regionId||'forest';
+    const region=REGION_DATA[regionId];
+    if(!region)return;
+    const protectedHero=hasActiveBarrierFor(player.root,true);
+    if(protectedHero){protectedHero.hp=Math.max(0,protectedHero.hp-16);updateBarrierCracks(protectedHero);showToast('Anti-Magic Barrier absorbs the boss spell!');if(protectedHero.hp<=0)breakBarrier(protectedHero);return;}
+    if(regionId==='frostveil'){
+        state.playerFrozenTimer=Math.max(state.playerFrozenTimer||0,2.4);
+        for(const c of activeCompanions())if(distance(c.model.root.position,player.root.position)<15){c.frozenTimer=Math.max(c.frozenTimer||0,2.4);c._preFreezeMaterial=c.model.body.material;c.model.body.material=materials.ice;}
+        burstEffect(player.root.position,materials.ice,5.5);
+        showToast('The Pale Glacier Wyrm freezes the party!');
+    }else if(regionId==='starfall'){
+        for(let i=0;i<2;i++){
+            const a=i*Math.PI+Math.random()*0.4;
+            const pos=enemy.root.position.add(new Vector3(Math.cos(a)*4,0,Math.sin(a)*4));
+            addRegionalEnemy('starfall',pos,6+i);
+        }
+        burstEffect(enemy.root.position,materials.starCrystal,3.8);
+        showToast('The Sunken Star Sentinel summons two Dune Wraiths!');
+    }else if(regionId==='emberfall'){
+        burstEffect(enemy.root.position,materials.fire,4.8);
+        for(const c of activeCompanions())if(distance(c.model.root.position,enemy.root.position)<6)c.hp=Math.max(0,c.hp-18);
+        if(distance(player.root.position,enemy.root.position)<6)state.hp=Math.max(0,state.hp-18);
+        showToast('The Cinderheart Colossus unleashes a fire pulse!');
+    }else if(regionId==='mire'){
+        burstEffect(enemy.root.position,materials.mireGlow,5.2);
+        if(distance(player.root.position,enemy.root.position)<8)state.hp=Math.max(0,state.hp-24);
+        for(const c of activeCompanions())if(distance(c.model.root.position,enemy.root.position)<8)c.hp=Math.max(0,c.hp-24);
+        showToast('The Hollowfen Behemoth releases a toxic bog wave!');
+    }else{
+        burstEffect(enemy.root.position,materials.crystal,4.8);
+        if(distance(player.root.position,enemy.root.position)<7)state.hp=Math.max(0,state.hp-20);
+        for(const c of activeCompanions())if(distance(c.model.root.position,enemy.root.position)<7)c.hp=Math.max(0,c.hp-20);
+        showToast('The Grove Guardian unleashes a root shockwave!');
+    }
+    if(state.hp<=0)playerDefeated();
+}
+
+function spawnSummonedAlly(owner, hp=50) {
+    const root=new TransformNode('summoned ether guardian',scene);
+    const material=new StandardMaterial('summoned guardian glow',scene);
+    material.diffuseColor=new Color3(0.25,0.75,0.56);material.emissiveColor=new Color3(0.06,0.32,0.22);material.alpha=0.9;
+    const body=MeshBuilder.CreateCapsule('summoned guardian body',{height:1.45,radius:0.4,tessellation:12},scene);body.parent=root;body.position.y=0.95;body.material=material;
+    const core=MeshBuilder.CreateSphere('summoned guardian core',{diameter:0.42,segments:10},scene);core.parent=root;core.position.y=1.55;core.material=materials.mireGlow;glowLayer.addIncludedOnlyMesh(core);
+    const ownerRoot=owner?.model?.root||player.root;
+    root.position.copyFrom(ownerRoot.position.add(new Vector3((Math.random()-.5)*2,0,(Math.random()-.5)*2)));
+    const summon={root,body,hp,maxHp:hp,attackTimer:0.6,ownerId:owner?.id||'player',owner,material,lifeTimer:240};
+    summonedAllies.push(summon);return summon;
+}
+
+function updateSummonedAllies(dt) {
+    for(let i=summonedAllies.length-1;i>=0;i--){
+        const ally=summonedAllies[i];
+        if(ally.hp<=0||ally.lifeTimer<=0||ally.root.isDisposed()){if(!ally.root.isDisposed())ally.root.dispose();ally.material.dispose();summonedAllies.splice(i,1);continue;}
+        ally.lifeTimer-=dt;ally.attackTimer=Math.max(0,ally.attackTimer-dt);
+        const target=nearestEnemyFrom(ally.root.position,24);
+        if(target){const d=distance(ally.root.position,target.root.position);if(d>2.4)moveToward(ally.root,target.root.position,3.7,dt);else if(ally.attackTimer<=0){dealDamage(target,16+state.level+(ally.owner?.upgradeLevel||0)*2,ally.root);ally.attackTimer=1.8;}}
+        else if(ally.owner?.model?.root){const d=distance(ally.root.position,ally.owner.model.root.position);if(d>9)moveToward(ally.root,ally.owner.model.root.position,3.2,dt);}
+    }
+}
+function getRequiredKills(regionId) { return REGION_DATA[regionId]?.requiredKills || 8; }
+function isAbilityUnlocked(id) {
+    if (id === 'barrier') return !!state.regionProgress.emberfall?.rescued;
+    if (id === 'antiMagic') return !!state.regionProgress.frostveil?.rescued;
+    if (id === 'deathBeam') return !!state.regionProgress.starfall?.rescued;
+    return ['arcane','heal','nova'].includes(id);
+}
+function spawnRegionBoss(regionId) {
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    if (!region || !progress || progress.bossUnlocked || progress.bossDefeated || progress.kills < getRequiredKills(regionId) || progress.elapsed < 60) return;
+    progress.bossUnlocked = true;
+    if (regionId === 'forest') addBoss(); else addRegionalBoss(regionId);
+    setObjective(`Defeat ${region.bossName}`, `${region.name} has been explored and its guardians defeated. The boss is waiting at the end of the trail.`);
+    showToast(`${region.bossName} has appeared at the end of the trail!`, 4.5);
+    updateHUD();
+    void saveGame(true);
+}
+function updateRegionExploration(dt) {
+    if (state.zone === 'base' || state.dungeonState) return;
+    const regionId = state.zone;
+    const region = REGION_DATA[regionId];
+    const progress = state.regionProgress[regionId];
+    if (!region || !progress || progress.bossDefeated) return;
+    progress.elapsed = (progress.elapsed || 0) + dt;
+    // Two staggered ambushes create surprises along the trail without endlessly spawning enemies.
+    const ambushTimes = [21, 43];
+    while (progress.ambushesTriggered < ambushTimes.length && progress.elapsed >= ambushTimes[progress.ambushesTriggered]) {
+        const wave = progress.ambushesTriggered++;
+        for (let i = 0; i < 2; i++) {
+            const angle = (wave * 2 + i) * Math.PI * 0.82;
+            const pos = player.root.position.add(new Vector3(Math.cos(angle) * (7 + i * 2), 0, Math.sin(angle) * (7 + i * 2)));
+            if (regionId === 'forest') addWolf(new Vector3(pos.x - FOREST_OFFSET.x,0,pos.z - FOREST_OFFSET.z), true);
+            else addRegionalEnemy(regionId, pos, 4 + wave * 2 + i);
+        }
+        showToast(`Ambush! ${region.enemyName} have surrounded the trail.`, 3.6);
+    }
+    if (progress.elapsed >= 60 && progress.kills >= getRequiredKills(regionId) && !progress.bossUnlocked) spawnRegionBoss(regionId);
+}
 function distance(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 function nearestEnemyFrom(position, maxDistance = Number.POSITIVE_INFINITY) {
     let best = null;
@@ -1894,16 +2270,17 @@ function updateQuestProgress() {
     const regionId = state.zone !== 'base' && REGION_DATA[state.zone] ? state.zone : 'forest';
     const region = REGION_DATA[regionId];
     const progress = state.regionProgress[regionId];
-    const pct = progress.bossDefeated ? 100 : progress.bossUnlocked ? 78 : progress.kills / 3 * 60;
+    const required = getRequiredKills(regionId);
+    const pct = progress.bossDefeated ? 100 : progress.bossUnlocked ? 84 : progress.kills / required * 68;
     $('quest-progress-bar').style.width = `${pct}%`;
     $('quest-progress-text').textContent = progress.bossDefeated
         ? `${region.name} cleared · ${companionById[region.companionId].name} rescued`
-        : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / 3 threats defeated`;
+        : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / ${required} threats defeated · ${Math.min(60, Math.floor(progress.elapsed || 0))}/60 sec`;
 }
 
 function updateHUD() {
     const maxHp = 120 + (state.level - 1) * 14;
-    const maxMana = 80 + (state.level - 1) * 8;
+    const maxMana = getMaxMana();
     $('hero-name').textContent = playerName.toUpperCase();
     $('hero-class').textContent = playerClass.toUpperCase();
     $('level-label').textContent = `LV ${state.level}`;
@@ -1933,7 +2310,8 @@ function updateHUD() {
         member.innerHTML = `<div class="party-avatar">${c.name.charAt(0)}</div><div><b>${c.name}</b><small>${c.role}${c.recovering ? ' · recovering' : ''}</small></div><div class="party-health"><i style="width:${pct}%"></i></div>`;
         partyList.appendChild(member);
     }
-    $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : 'FROST NOVA'}`;
+    $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : state.defaultAbility === 'nova' ? 'FROST NOVA' : state.defaultAbility === 'barrier' ? 'BARRIER' : state.defaultAbility === 'antiMagic' ? 'ANTI-MAGIC BARRIER' : 'DEATH BEAM'}`;
+    document.querySelectorAll('[data-ability]').forEach(button => { button.classList.toggle('hidden', !isAbilityUnlocked(button.dataset.ability)); button.disabled = !isAbilityUnlocked(button.dataset.ability); });
     const target = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(18);
     const enemyCard = $('enemy-card');
     if (state.zone !== 'base' && target) {
@@ -1945,6 +2323,7 @@ function updateHUD() {
     else
         enemyCard.classList.add('hidden');
     updateQuestProgress();
+    updateUpgradePanel();
 }
 // -----------------------------------------------------------------------------
 // Save data: IndexedDB with a localStorage fallback and portable JSON backup.
@@ -1967,10 +2346,10 @@ function makeSaveData() {
     for (const c of companions)
         active[c.id] = c.active;
     return {
-        version: 3, worldLayoutVersion: 3, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
+        version: 4, worldLayoutVersion: 4, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
         gold: state.gold, crystals: state.crystals, tokens: state.tokens, weaponLevel: state.weaponLevel,
         wolfKills: state.wolfKills, bossDefeated: state.bossDefeated, aureliaRecruited: state.aureliaRecruited,
-        regionProgress: state.regionProgress, partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
+        regionProgress: state.regionProgress, abilityLevels: state.abilityLevels, manaUpgradeLevel: state.manaUpgradeLevel, companionUpgradeLevels: state.companionUpgradeLevels, partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
         zone: state.zone, playerX: player.root.position.x, playerZ: player.root.position.z,
         worldMinutes: state.worldMinutes, weatherIndex: state.weatherIndex, collectedCrystalIds: Array.from(state.crystalsCollected)
     };
@@ -2035,17 +2414,25 @@ function applySave(data) {
     state.level = Math.max(1, Number(data.level) || 1);
     state.xp = Math.max(0, Number(data.xp) || 0);
     state.hp = Math.max(1, Math.min(120 + (state.level - 1) * 14, Number(data.hp) || 120));
-    state.mana = Math.max(0, Math.min(80 + (state.level - 1) * 8, Number(data.mana) || 80));
+    state.mana = Math.max(0, Math.min(getMaxMana(), Number(data.mana) || 80));
     state.gold = Math.max(0, Number(data.gold) || 0);
     state.crystals = Math.max(0, Number(data.crystals) || 0);
     state.tokens = Math.max(0, Number(data.tokens) || 0);
     state.weaponLevel = Math.max(1, Number(data.weaponLevel) || 1);
+    state.manaUpgradeLevel = Math.max(0, Math.min(10, Number(data.manaUpgradeLevel) || 0));
+    state.mana = Math.max(0, Math.min(getMaxMana(), Number(data.mana) || 80));
+    state.abilityLevels = { ...state.abilityLevels, ...(data.abilityLevels || {}) };
+    for (const key of Object.keys(state.abilityLevels)) state.abilityLevels[key] = Math.max(1, Math.min(10, Number(state.abilityLevels[key]) || 1));
+    state.companionUpgradeLevels = data.companionUpgradeLevels && typeof data.companionUpgradeLevels === 'object' ? data.companionUpgradeLevels : {};
     state.regionProgress = freshRegionProgress();
     if (data.regionProgress && typeof data.regionProgress === 'object') {
         for (const id of Object.keys(REGION_DATA)) {
             const saved = data.regionProgress[id];
             if (saved) state.regionProgress[id] = {
-                kills: Math.max(0, Math.min(3, Number(saved.kills) || 0)),
+                kills: Math.max(0, Math.min(getRequiredKills(id), Number(saved.kills) || 0)),
+                elapsed: Math.max(0, Number(saved.elapsed) || 0),
+                ambushesTriggered: Math.max(0, Math.min(2, Number(saved.ambushesTriggered) || 0)),
+                dungeonCleared: !!saved.dungeonCleared,
                 bossUnlocked: !!saved.bossUnlocked,
                 bossDefeated: !!saved.bossDefeated,
                 // A saved recruit flag is never accepted unless that region's boss was beaten.
@@ -2055,9 +2442,9 @@ function applySave(data) {
     }
     // Migrate the former single-region save format without resetting the forest.
     state.wolfKills = Math.max(0, Number(data.wolfKills) || 0);
-    state.regionProgress.forest.kills = Math.max(state.regionProgress.forest.kills, Math.min(3, state.wolfKills));
+    state.regionProgress.forest.kills = Math.max(state.regionProgress.forest.kills, Math.min(getRequiredKills('forest'), state.wolfKills));
     state.regionProgress.forest.bossDefeated = state.regionProgress.forest.bossDefeated || !!data.bossDefeated;
-    state.regionProgress.forest.bossUnlocked = state.regionProgress.forest.bossUnlocked || state.regionProgress.forest.kills >= 3 || state.regionProgress.forest.bossDefeated;
+    state.regionProgress.forest.bossUnlocked = state.regionProgress.forest.bossUnlocked || state.regionProgress.forest.kills >= getRequiredKills('forest') || state.regionProgress.forest.bossDefeated;
     state.regionProgress.forest.rescued = state.regionProgress.forest.rescued || (Number(data.version || 0) < 3 && state.regionProgress.forest.bossDefeated);
     state.bossDefeated = state.regionProgress.forest.bossDefeated;
     state.bossUnlocked = state.regionProgress.forest.bossUnlocked;
@@ -2066,6 +2453,7 @@ function applySave(data) {
     state.strategy = data.strategy || 'protect';
     state.command = data.command || 'follow';
     state.zone = data.zone === 'base' || REGION_DATA[data.zone] ? data.zone : 'base';
+    if (state.zone !== 'base' && !isRegionUnlocked(state.zone)) state.zone = 'base';
     state.worldMinutes = Number(data.worldMinutes) || 9 * 60;
     state.weatherIndex = Number(data.weatherIndex) || 0;
     state.crystalsCollected.clear();
@@ -2078,6 +2466,10 @@ function applySave(data) {
     for (const c of companions) {
         const region = Object.values(REGION_DATA).find(r => r.companionId === c.id);
         c.recruited = region ? !!state.regionProgress[region.id].rescued : (c.id === 'reaphel' || c.id === 'sylva');
+        c.upgradeLevel = Math.max(0, Math.min(10, Number(state.companionUpgradeLevels[c.id]) || 0));
+        c.maxHp = c._baseMaxHp || c.maxHp;
+        c.maxHp += c.upgradeLevel * 20;
+        c.hp = Math.min(c.maxHp, c.hp);
         c.active = c.recruited && (data.partyActive ? !!data.partyActive[c.id] : c.id === 'reaphel' || c.id === 'sylva');
     }
     // A legacy save may have unlocked Aurelia before the boss requirement existed.
@@ -2095,6 +2487,10 @@ function applySave(data) {
         const wasInsideOldForest = savedX >= -37 && savedX <= 37 && savedZ >= -40 && savedZ <= 34;
         if (wasInsideOldForest) { savedX += FOREST_OFFSET.x; savedZ += FOREST_OFFSET.z; }
         else { savedX = 80; savedZ = 52; }
+    }
+    if (savedX > 125 && state.zone !== 'base') {
+        savedX = REGION_DATA[state.zone].entryPosition.x;
+        savedZ = REGION_DATA[state.zone].entryPosition.z;
     }
     player.root.position.set(savedX, 0, savedZ);
     if (state.zone === 'base') {
@@ -2167,13 +2563,14 @@ function gainXP(amount) {
         state.xp -= state.level * 100;
         state.level++;
         state.hp = 120 + (state.level - 1) * 14;
-        state.mana = 80 + (state.level - 1) * 8;
+        state.mana = getMaxMana();
         showToast(`Level ${state.level}! Your health, mana and combat stats increased.`, 4);
     }
     updateHUD();
 }
-function dealDamage(enemy, amount) {
-    if (enemy.dead) return;
+function dealDamage(enemy, amount, attacker = player.root) {
+    if (!enemy || enemy.dead) return;
+    if (attacker && attacker.position) { enemy.aggroTarget = attacker; enemy.aggroTimer = 14; enemy.lastAttackedBy = attacker.name || 'player'; }
     enemy.hp = Math.max(0, enemy.hp - amount);
     if (!enemy.hitAnimating) {
         enemy.hitAnimating = true;
@@ -2199,18 +2596,29 @@ function defeatEnemy(enemy) {
     const region = REGION_DATA[regionId];
     const progress = state.regionProgress[regionId];
     if (enemy.kind !== 'boss' && region && progress) {
-        progress.kills = Math.min(3, progress.kills + 1);
-        if (regionId === 'forest') state.wolfKills = progress.kills;
-        state.gold += regionId === 'forest' ? 15 : 24;
-        gainXP(regionId === 'forest' ? 42 : 58);
-        showToast(`${enemy.displayName || region.enemyName} defeated · +XP · Gold gained`);
-        if (progress.kills >= 3 && !progress.bossUnlocked && !progress.bossDefeated) {
-            progress.bossUnlocked = true;
-            if (regionId === 'forest') { state.bossUnlocked = true; addBoss(); }
-            else addRegionalBoss(regionId);
-            setObjective(`Defeat ${region.bossName}`, `Three ${region.enemyName} have been defeated. The boss guards a crystal prison.`);
-        } else if (!progress.bossUnlocked) {
-            setObjective(`Hunt the ${region.enemyName}`, `${region.name}: ${progress.kills} of 3 guardians defeated.`);
+        if (enemy.dungeonOnly) {
+            state.gold += 45;
+            gainXP(85);
+            if (state.dungeonState) {
+                state.dungeonState.remaining = Math.max(0, state.dungeonState.remaining - 1);
+                if (state.dungeonState.remaining === 0) {
+                    progress.dungeonCleared = true;
+                    showToast(`Dungeon cleared! +45 gold and experience.`, 4);
+                    void saveGame(true);
+                }
+            }
+        } else {
+            progress.kills = Math.min(getRequiredKills(regionId), progress.kills + 1);
+            if (regionId === 'forest') state.wolfKills = progress.kills;
+            state.gold += regionId === 'forest' ? 18 : 30;
+            gainXP(regionId === 'forest' ? 55 : 72 + Math.round(region.difficulty * 8));
+            showToast(`${enemy.displayName || region.enemyName} defeated · +XP · Gold gained`);
+            if (progress.kills >= getRequiredKills(regionId) && !progress.bossUnlocked && !progress.bossDefeated) {
+                if ((progress.elapsed || 0) >= 60) spawnRegionBoss(regionId);
+                else showToast(`The trail is still opening. Keep exploring for ${Math.ceil(60 - progress.elapsed)} more seconds.`);
+            } else if (!progress.bossUnlocked) {
+                setObjective(`Hunt the ${region.enemyName}`, `${region.name}: ${progress.kills} of ${getRequiredKills(regionId)} threats defeated.`);
+            }
         }
     } else if (enemy.kind === 'boss' && region && progress) {
         progress.bossDefeated = true;
@@ -2262,14 +2670,14 @@ function attack() {
     if (playerClass === 'knight' || playerClass === 'warrior') {
         animateCharacterAttack(player);
         const strikeDamage = (playerClass === 'knight' ? 31 : 28) + state.weaponLevel * 5 + state.level * 2;
-        window.setTimeout(() => { if (!target.dead) dealDamage(target, strikeDamage); }, 190);
+        window.setTimeout(() => { if (!target.dead) dealDamage(target, strikeDamage, player.root); }, 190);
         createSwordSlash(player);
     } else if (playerClass === 'ranger') {
         animateCharacterAttack(player);
         window.setTimeout(() => {
             if (state.started && !target.dead) {
                 spawnArrowProjectile(player.root.position.add(new Vector3(0, 1.42, 0.15)), target,
-                    23 + state.weaponLevel * 3 + state.level * 2, materials.gold, 23);
+                    23 + state.weaponLevel * 3 + state.level * 2, materials.gold, 23, player.root);
             }
         }, 275);
     } else {
@@ -2310,18 +2718,18 @@ function createSwordSlash(model) {
     requestAnimationFrame(frame);
 }
 
-function spawnProjectile(from, target, damage, color, speed = 17) {
+function spawnProjectile(from, target, damage, color, speed = 17, source = player.root) {
     const orb = MeshBuilder.CreateSphere('magic projectile', { diameter: 0.32, segments: 10 }, scene);
     orb.position.copyFrom(from);
     orb.material = color;
     projectiles.push({
         mesh: orb, from: from.clone(),
         to: target.root.position.add(new Vector3(0, target.kind === 'boss' ? 1.5 : 1, 0)),
-        age: 0, duration: Math.max(0.18, distance(from, target.root.position) / speed), damage, target
+        age: 0, duration: Math.max(0.18, distance(from, target.root.position) / speed), damage, target, source
     });
 }
 
-function spawnArrowProjectile(from, target, damage, color = materials.gold, speed = 23) {
+function spawnArrowProjectile(from, target, damage, color = materials.gold, speed = 23, source = player.root) {
     const arrow = new TransformNode('flying ranger arrow', scene);
     const shaft = MeshBuilder.CreateCylinder('arrow shaft', { height: 0.88, diameter: 0.035, tessellation: 6 }, scene);
     shaft.parent = arrow;
@@ -2344,81 +2752,74 @@ function spawnArrowProjectile(from, target, damage, color = materials.gold, spee
     arrow.rotation.y = Math.atan2(direction.x, direction.z);
     projectiles.push({
         mesh: arrow, from: from.clone(), to: destination.clone(), age: 0,
-        duration: Math.max(0.16, distance(from, target.root.position) / speed), damage, target
+        duration: Math.max(0.16, distance(from, target.root.position) / speed), damage, target, source
     });
 }
 
 function castAbility(id) {
     if (!state.started || state.paused) return;
-    if (state.abilityCooldowns[id] > 0) {
-        showToast('That ability is still recharging.', 1.2);
-        return;
+    if (!isAbilityUnlocked(id)) { showToast('Defeat the region boss and rescue its prisoner to unlock this ability.'); return; }
+    if (state.abilityCooldowns[id] > 0) { showToast('That ability is still recharging.',1.2); return; }
+    if (id === 'barrier' || id === 'antiMagic') { createProtectionField(id === 'antiMagic'); return; }
+    if (id === 'deathBeam') {
+        const cost=70;if(state.mana<cost){showToast(`Death Beam requires ${cost} MP.`);return;}
+        state.mana-=cost;state.abilityCooldowns.deathBeam=18;animateCharacterAttack(player);
+        const forward=camera.getDirection(new Vector3(0,0,1));forward.y=0;forward.normalize();
+        const back=player.root.position.subtract(forward.scale(2.2));
+        const yaw=Math.atan2(forward.x,forward.z);
+        drawMagicGlyph(back.add(new Vector3(0,0.065,0)),new Color3(1,0.12,0.12),{floor:true,size:2.0,duration:1050},()=>{
+            const length=27;
+            const beamMat=new StandardMaterial('death beam red light',scene);beamMat.diffuseColor=new Color3(1,0.04,0.03);beamMat.emissiveColor=new Color3(0.9,0.015,0.015);beamMat.alpha=0.72;beamMat.backFaceCulling=false;
+            const beam=MeshBuilder.CreateCylinder('wide red death beam',{height:1,diameter:2.3,tessellation:24},scene);
+            beam.position.copyFrom(player.root.position.add(forward.scale(length*0.5)).add(new Vector3(0,1.45,0)));
+            beam.rotation.set(Math.PI/2,yaw,0);beam.scaling.set(3.2,length,3.2);beam.material=beamMat;beam.isPickable=false;
+            const level=state.abilityLevels.deathBeam||1;
+            let hits=0;
+            for(const enemy of enemies){if(enemy.dead)continue;const rel=enemy.root.position.subtract(player.root.position);rel.y=0;const along=Vector3.Dot(rel,forward);if(along>0&&along<length){const closest=player.root.position.add(forward.scale(along));if(distance(enemy.root.position,closest)<4.7){dealDamage(enemy,135+level*22,player.root);hits++;}}}
+            const start=performance.now();const fade=now=>{const t=Math.min(1,(now-start)/1050);beamMat.alpha=0.72*(1-t);if(t<1)requestAnimationFrame(fade);else{beam.dispose();beamMat.dispose();}};requestAnimationFrame(fade);
+            showToast(`Death Beam tears through the path! ${hits} enemies struck.`,3.5);
+        });
+        updateHUD();return;
     }
-
-    const costs = { arcane: 12, heal: 18, nova: 24 };
-    if (!(id in costs)) return;
-
-    let target = null;
-    if (id === 'arcane' || id === 'nova') {
-        target = currentTarget && !currentTarget.dead && distance(player.root.position, currentTarget.root.position) <= 20
-            ? currentTarget : nearestEnemy(20);
-        if (!target) {
-            showToast(id === 'arcane' ? 'No target is close enough for Arcane Bolt.' : 'No target is close enough for Frost Nova.', 1.4);
-            return;
-        }
+    const costs={arcane:12,heal:18,nova:24};
+    if(!(id in costs))return;
+    const level=state.abilityLevels[id]||1;
+    let target=null;
+    if(id==='arcane'||id==='nova'){
+        target=currentTarget&&!currentTarget.dead&&distance(player.root.position,currentTarget.root.position)<=20?currentTarget:nearestEnemy(20);
+        if(!target){showToast(id==='arcane'?'No target is close enough for Arcane Bolt.':'No target is close enough for Frost Nova.',1.4);return;}
     }
-    if (state.mana < costs[id]) {
-        showToast('Not enough mana. Wait for it to recover.', 1.5);
-        return;
-    }
-
-    state.mana -= costs[id];
-    animateCharacterAttack(player);
-
-    if (id === 'arcane') {
-        state.abilityCooldowns.arcane = 1.3;
-        const direction = target.root.position.subtract(player.root.position);
-        direction.y = 0;
-        direction.normalize();
-        const glyphPosition = player.root.position.add(direction.scale(1.28)).add(new Vector3(0, 1.52, 0));
-        drawMagicGlyph(glyphPosition, new Color3(0.28, 0.9, 1),
-            { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.66, duration: 790 }, () => {
-                if (!target.dead) {
-                    spawnProjectile(glyphPosition.clone(), target,
-                        48 + state.level * 4 + state.weaponLevel * 2, materials.crystal, 20);
-                }
-            });
+    if(state.mana<costs[id]){showToast('Not enough mana. Wait for it to recover.',1.5);return;}
+    state.mana-=costs[id];animateCharacterAttack(player);
+    if(id==='arcane'){
+        state.abilityCooldowns.arcane=1.3;
+        const direction=target.root.position.subtract(player.root.position);direction.y=0;direction.normalize();
+        const glyphPosition=player.root.position.add(direction.scale(1.28)).add(new Vector3(0,1.52,0));
+        drawMagicGlyph(glyphPosition,new Color3(0.28,0.9,1),{floor:false,yaw:Math.atan2(direction.x,direction.z),size:0.66,duration:790},()=>{
+            if(!target.dead)spawnProjectile(glyphPosition.clone(),target,48*level+state.level*4+state.weaponLevel*2,materials.crystal,20,player.root);
+        });
         showToast('Arcane Bolt!');
-    } else if (id === 'heal') {
-        state.abilityCooldowns.heal = 8;
-        state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + 36);
-        playHealingEffect(player.root);
-        for (const c of activeCompanions()) {
-            c.hp = Math.min(c.maxHp, c.hp + 36);
-            playHealingEffect(c.model.root);
-        }
+    }else if(id==='heal'){
+        state.abilityCooldowns.heal=8;
+        const heal=36+(level-1)*8;
+        state.hp=Math.min(120+(state.level-1)*14,state.hp+heal);playHealingEffect(player.root);
+        for(const c of activeCompanions()){c.hp=Math.min(c.maxHp,c.hp+heal);playHealingEffect(c.model.root);}
         showToast('Healing Wave restores health to your party.');
-    } else {
-        state.abilityCooldowns.nova = 12;
-        // Hold the marked target still while its floor rune is drawn and the ice column rises.
-        target.telegraphTimer = 1.4;
-        const freezePosition = target.root.position.clone();
-        const targetRadius = getTargetVisualRadius(target);
-        const frostGlyphRadius = targetRadius * FROST_GLYPH_TARGET_RADIUS_MULTIPLIER;
-        drawMagicGlyph(freezePosition.add(new Vector3(0, 0.055, 0)), new Color3(0.36, 0.88, 1),
-            { floor: true, size: frostGlyphRadius / MAGIC_GLYPH_SIZE_MULTIPLIER, duration: 730 }, () => {
-                if (target.dead) return;
-                createRisingMagicBeam(target.root.position, new Color3(0.36, 0.88, 1), 2.65, 0.88, 620, () => {
-                    if (!target.dead) {
-                        freezeEnemy(target, 2.8);
-                        dealDamage(target, 62 + state.level * 4);
-                    }
-                });
+    }else{
+        state.abilityCooldowns.nova=12;target.telegraphTimer=1.4;
+        const freezePosition=target.root.position.clone();
+        const frostGlyphRadius=getTargetVisualRadius(target)*FROST_GLYPH_TARGET_RADIUS_MULTIPLIER;
+        drawMagicGlyph(freezePosition.add(new Vector3(0,0.055,0)),new Color3(0.36,0.88,1),{floor:true,size:frostGlyphRadius/MAGIC_GLYPH_SIZE_MULTIPLIER,duration:730},()=>{
+            if(target.dead)return;
+            createRisingMagicBeam(target.root.position,new Color3(0.36,0.88,1),2.65,0.88,620,()=>{
+                if(!target.dead){freezeEnemy(target,2.8+(level-1)*0.25);dealDamage(target,62*level+state.level*4,player.root);}
             });
+        });
         showToast('Frost Nova freezes the targeted enemy!');
     }
     updateHUD();
 }
+
 
 function burstEffect(position, material, size) {
     const effect = MeshBuilder.CreateTorus('spell burst', { diameter: 1.3, thickness: 0.12, tessellation: 32 }, scene);
@@ -2445,15 +2846,15 @@ function companionAttack(companion, enemy) {
 
     if (companion.role === 'Knight' || role === 'knight' || role === 'warrior') {
         if (distance(model.root.position, enemy.root.position) <= 3.0) {
-            const strikeDamage = 19 + state.level * 2;
-            window.setTimeout(() => { if (!enemy.dead) dealDamage(enemy, strikeDamage); }, 190);
+            const strikeDamage = 19 + state.level * 2 + (companion.upgradeLevel || 0) * 4;
+            window.setTimeout(() => { if (!enemy.dead) dealDamage(enemy, strikeDamage, model.root); }, 190);
             createSwordSlash(model);
         }
     } else if (role === 'ranger' || role === 'archer' || companion.role === 'Archer') {
         window.setTimeout(() => {
             if (!enemy.dead && model.root.isEnabled()) {
                 spawnArrowProjectile(model.root.position.add(new Vector3(0, 1.42, 0.15)), enemy,
-                    22 + state.level * 2, materials.gold, 21);
+                    22 + state.level * 2 + (companion.upgradeLevel || 0) * 4, materials.gold, 21, model.root);
             }
         }, 275);
     } else {
@@ -2465,8 +2866,8 @@ function companionAttack(companion, enemy) {
             ? new Color3(0.34, 1, 0.56) : new Color3(0.3, 0.86, 1),
             { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.43, duration: 500 }, () => {
                 if (!enemy.dead) spawnProjectile(glyphPosition.clone(), enemy,
-                    companion.role === 'Healer' ? 13 : 21 + state.level * 2,
-                    companion.role === 'Healer' ? materials.heal : materials.crystal, 17);
+                    companion.role === 'Healer' ? 13 + (companion.upgradeLevel || 0) * 3 : 21 + state.level * 2 + (companion.upgradeLevel || 0) * 4,
+                    companion.role === 'Healer' ? materials.heal : materials.crystal, 17, model.root);
             });
     }
 }
@@ -2533,6 +2934,11 @@ function useCompanionAbility() {
         showToast('That companion is not currently active.');
         return;
     }
+    const now = performance.now();
+    if (c.specialCooldown > 0) {
+        showToast(`${c.name}'s special ability recharges in ${Math.ceil(c.specialCooldown)} seconds.`);
+        return;
+    }
     animateCharacterAttack(c.model);
     if (c.role === 'Healer') {
         const candidates = [{ hp: state.hp, maxHp: 120 + (state.level - 1) * 14, root: player.root, player: true }, ...companions.filter(x => x.recruited && !x.recovering).map(x => ({ hp: x.hp, maxHp: x.maxHp, root: x.model.root, companion: x }))];
@@ -2540,22 +2946,41 @@ function useCompanionAbility() {
         const target = candidates[0];
         if (target.player) state.hp = Math.min(target.maxHp, state.hp + 42);
         else target.companion.hp = Math.min(target.maxHp, target.companion.hp + 42);
-        burstEffect(target.root.position, materials.heal, 2.0);
-        showToast(`Aurelia casts Healing Light on ${target.player ? playerName : target.companion.name}.`);
+        playHealingEffect(target.root);
+        showToast(`${c.name} casts Healing Light on ${target.player ? playerName : target.companion.name}.`);
+        c.specialCooldown = 15;
     } else if (c.role === 'Archer') {
         const target = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(22);
         if (!target) { showToast(`${c.name} has no target in range.`); return; }
-        spawnProjectile(c.model.root.position.add(new Vector3(0, 1.5, 0)), target, 48 + state.level * 3, materials.gold, 20);
+        spawnArrowProjectile(c.model.root.position.add(new Vector3(0, 1.5, 0)), target, 48 + state.level * 3, materials.gold, 20, c.model.root);
         showToast(`${c.name} fires a Piercing Shot.`);
+        c.specialCooldown = 15;
+    } else if (c.role === 'Summoner') {
+        const amount = 4; // Special call brings four additional spirits; passive summons retain their own five-ally cap.
+        for (let i = 0; i < amount; i++) spawnSummonedAlly(c, 65);
+        const center = player.root.position.clone();
+        let hits = 0;
+        for (const enemy of enemies) {
+            if (!enemy.dead && distance(enemy.root.position, center) <= 9) {
+                dealDamage(enemy, 52 + state.level * 5, c.model.root);
+                hits++;
+            }
+        }
+        burstEffect(center, materials.mireGlow, 6.5);
+        showToast(`${c.name} summons ${amount} spirits and releases a mire burst (${hits} enemies hit).`, 4);
+        c.specialCooldown = 15;
     } else {
         state.protectionTimer = Math.max(state.protectionTimer, 7);
         c.command = 'defend';
         burstEffect(player.root.position, materials.gold, 2.2);
         showToast(`${c.name} raises a Guardian Ward. Incoming damage is reduced briefly.`);
+        c.specialCooldown = 15;
     }
     $('command-overlay').classList.add('hidden');
     updateHUD();
 }
+
+
 function formationOffset(index) {
     if (state.formation === 'defensive')
         return [new Vector3(-1.8, 0, 2), new Vector3(1.8, 0, 2), new Vector3(0, 0, 3.2)][index] ?? Vector3.Zero();
@@ -2578,20 +3003,30 @@ function moveToward(root, destination, speed, dt) {
 // -----------------------------------------------------------------------------
 function regionAtPosition(x, z) {
     if (x >= 55 && x <= 105 && z >= 55 && z <= 105) return 'base';
-    for (const id of ['forest', 'emberfall', 'frostveil', 'mire', 'starfall']) {
+    for (const id of REGION_ORDER) {
         const b = REGION_DATA[id].bounds;
         if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return id;
     }
-    // Keep narrow connecting roads assigned to the region the player is walking toward.
-    if (Math.abs(x - 80) < 5.5 && z < 3 && z > -5) return 'emberfall';
-    if (Math.abs(z - 32) < 5.5 && x > 117 && x < 123) return 'frostveil';
-    if (Math.abs(z - 32) < 5.5 && x > 37 && x < 43) return 'mire';
-    if (Math.abs(x - 80) < 6 && z > 104 && z < 133) return 'starfall';
+    // The narrow connector gaps inherit the area the player is approaching.
+    if (Math.abs(x - 80) < 5.5) {
+        if (z < 55 && z > -246) return 'forest';
+        if (z <= -240 && z > -526) return 'emberfall';
+        if (z <= -520 && z > -806) return 'frostveil';
+        if (z <= -800 && z > -1086) return 'starfall';
+        if (z <= -1080 && z > -1362) return 'mire';
+    }
     return null;
 }
 function updateZoneFromPosition() {
     const x = player.root.position.x, z = player.root.position.z;
     const nextZone = regionAtPosition(x, z) || state.zone || 'base';
+    if (nextZone !== 'base' && nextZone !== state.zone && !isRegionUnlocked(nextZone)) {
+        const nextRegionIndex = REGION_ORDER.indexOf(nextZone);
+        const previousRegion = REGION_DATA[REGION_ORDER[Math.max(0, nextRegionIndex - 1)]];
+        player.root.position.copyFrom(previousRegion?.bossPosition || new Vector3(80, 0, 48));
+        showToast(`The way to ${REGION_DATA[nextZone].name} is sealed. Rescue the previous region's prisoner first.`, 4);
+        return;
+    }
     if (nextZone !== state.zone) {
         state.zone = nextZone;
         updateZoneVisuals();
@@ -2610,7 +3045,12 @@ function updateZoneFromPosition() {
     }
 }
 function setZone(zone) {
+    if (state.dungeonState && zone !== state.zone) exitDungeon();
     if (zone !== 'base' && !REGION_DATA[zone]) zone = 'base';
+    if (zone !== 'base' && !isRegionUnlocked(zone)) {
+        showToast(`That region is still sealed. Free the prisoner in the previous region first.`, 3.5);
+        return;
+    }
     state.zone = zone;
     updateZoneVisuals();
     if (zone === 'base') {
@@ -2619,8 +3059,8 @@ function setZone(zone) {
         setObjective('Headquarters', 'Visit the planning table, rest at the hospital and upgrade your equipment before setting out.');
     } else {
         const region = REGION_DATA[zone];
-        const entry = zone === 'forest' ? new Vector3(80,0,52) : region.center.add(region.entryDirection.scale(31));
-        player.root.position.set(entry.x, 0, entry.z);
+        const entry = region.entryPosition.clone();
+        player.root.position.copyFrom(entry);
         ensureRegionEncounter(zone);
         positionCompanions();
         const progress = state.regionProgress[zone];
@@ -2750,12 +3190,81 @@ function closePlanning() {
         state.paused = false;
     void saveGame(true);
 }
+function ensureUpgradePanel() {
+    const overlay=$('inventory-overlay');
+    let panel=overlay.querySelector('#etheria-upgrade-panel');
+    if(panel)return panel;
+    panel=document.createElement('section');panel.id='etheria-upgrade-panel';
+    panel.style.cssText='margin-top:18px;padding:16px;border:1px solid rgba(205,190,145,.24);border-radius:14px;background:rgba(12,24,20,.58);color:#e9e5d6;';
+    const actions=overlay.querySelector('.modal-actions');
+    if(actions)actions.before(panel);else overlay.querySelector('.modal')?.appendChild(panel);
+    panel.addEventListener('click',event=>{
+        const button=event.target.closest('[data-upgrade-kind]');if(!button||button.disabled)return;
+        purchaseUpgrade(button.dataset.upgradeKind,button.dataset.upgradeId||'');
+    });
+    return panel;
+}
+function upgradePrice(kind,id='') {
+    if(kind==='mana')return 160*(state.manaUpgradeLevel+1);
+    if(kind==='ability')return 125*(state.abilityLevels[id]||1);
+    const companion=companionById[id];return companion?110*((companion.upgradeLevel||0)+1):Infinity;
+}
+function purchaseUpgrade(kind,id='') {
+    let cost=upgradePrice(kind,id);
+    if(!Number.isFinite(cost)){showToast('That upgrade is unavailable.');return;}
+    if(kind==='mana'&&state.manaUpgradeLevel>=10){showToast('Mana capacity is fully upgraded.');return;}
+    if(kind==='ability'&&(state.abilityLevels[id]||1)>=10){showToast('That ability is fully upgraded.');return;}
+    const companion=companionById[id];
+    if(kind==='companion'&&(!companion||!companion.recruited)){showToast('Rescue this companion before upgrading them.');return;}
+    if(kind==='companion'&&(companion.upgradeLevel||0)>=10){showToast(`${companion.name} is fully upgraded.`);return;}
+    if(state.gold<cost){showToast(`You need ${cost} gold for this upgrade. You have ${state.gold}.`);return;}
+    state.gold-=cost;
+    if(kind==='mana'){
+        state.manaUpgradeLevel++;state.mana=Math.min(getMaxMana(),state.mana+20);
+        showToast(`Mana capacity upgraded to ${getMaxMana()} MP.`);
+    }else if(kind==='ability'){
+        state.abilityLevels[id]=(state.abilityLevels[id]||1)+1;
+        showToast(`${id==='antiMagic'?'Anti-Magic Barrier':id==='deathBeam'?'Death Beam':id[0].toUpperCase()+id.slice(1)} upgraded to level ${state.abilityLevels[id]}.`);
+    }else{
+        companion.upgradeLevel=(companion.upgradeLevel||0)+1;
+        companion.maxHp=(companion._baseMaxHp||companion.maxHp)+companion.upgradeLevel*20;
+        companion.hp=Math.min(companion.maxHp,companion.hp+20);
+        state.companionUpgradeLevels[id]=companion.upgradeLevel;
+        showToast(`${companion.name} upgraded to level ${companion.upgradeLevel}: +20 maximum HP and stronger attacks.`);
+    }
+    updateHUD();updateUpgradePanel();void saveGame(true);
+}
+function updateUpgradePanel() {
+    const panel=document.getElementById('etheria-upgrade-panel');if(!panel)return;
+    const money=state.gold;
+    const button=(kind,id,title,detail,cost,level,max=10)=>{
+        const capped=level>=max;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid rgba(220,220,205,.12)"><div style="min-width:0"><b>${title}</b><div style="font:12px/1.4 system-ui;color:#b9c9bf">${detail} · Level ${level}/${max}</div></div><button data-upgrade-kind="${kind}" data-upgrade-id="${id}" ${capped||money<cost?'disabled':''} style="min-width:110px;padding:8px 10px;border:1px solid rgba(207,189,128,.45);border-radius:9px;background:${capped?'#39443d':'#283f36'};color:#f2e8c8;cursor:pointer;opacity:${capped||money<cost?'.55':'1'}">${capped?'MAX':`${cost} gold`}</button></div>`;
+    };
+    const manaLevel=state.manaUpgradeLevel||0;
+    let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3 style="margin:0;font:600 16px Georgia,serif">Upgrades & Training</h3><b style="color:#e3c97e">${money} gold</b></div><p style="margin:6px 0 10px;font:12px system-ui;color:#bac9be">Upgrade costs increase automatically with each level. Spend gold to strengthen spells, mana and teammates.</p>`;
+    html+=button('mana','mana','Mana Capacity',`+20 maximum MP · Current ${getMaxMana()} MP`,upgradePrice('mana'),manaLevel,10);
+    for(const id of ['arcane','heal','nova','barrier','antiMagic','deathBeam'])if(isAbilityUnlocked(id)){
+        const titles={arcane:'Arcane Bolt',heal:'Healing Wave',nova:'Frost Nova',barrier:'Barrier',antiMagic:'Anti-Magic Barrier',deathBeam:'Death Beam'};
+        const details={arcane:'Stronger projectile',heal:'More healing',nova:'More damage and freeze time',barrier:'More shield HP and duration',antiMagic:'More anti-magic HP and duration',deathBeam:'More beam damage'};
+        const level=state.abilityLevels[id]||1;
+        html+=button('ability',id,titles[id],details[id],upgradePrice('ability',id),level,10);
+    }
+    const recruited=companions.filter(c=>c.recruited);
+    if(recruited.length){html+='<h4 style="margin:18px 0 2px;font:600 14px Georgia,serif;color:#e8d9ac">Companion Training</h4>';
+        for(const c of recruited)html+=button('companion',c.id,c.name,`+20 maximum HP and stronger attacks · HP ${c.maxHp}`,upgradePrice('companion',c.id),c.upgradeLevel||0,10);
+    }
+    panel.innerHTML=html;
+}
+
 function openInventory(fromPause = false) {
     inventoryFromPaused = fromPause || state.paused;
     state.paused = true;
     $('pause-overlay').classList.add('hidden');
     $('inventory-overlay').classList.remove('hidden');
+    ensureUpgradePanel();
     updateHUD();
+    updateUpgradePanel();
 }
 function closeInventory() {
     $('inventory-overlay').classList.add('hidden');
@@ -2766,7 +3275,7 @@ function closeInventory() {
 function sleepUntilMorning() {
     state.worldMinutes = 8 * 60;
     state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + 60);
-    state.mana = 80 + (state.level - 1) * 8;
+    state.mana = getMaxMana();
     for (const c of companions)
         if (c.recruited) {
             c.hp = c.maxHp;
@@ -2779,7 +3288,7 @@ function sleepUntilMorning() {
 }
 function useHospital() {
     state.hp = 120 + (state.level - 1) * 14;
-    state.mana = 80 + (state.level - 1) * 8;
+    state.mana = getMaxMana();
     for (const c of companions)
         if (c.recruited) {
             c.hp = c.maxHp;
@@ -2802,6 +3311,35 @@ function upgradeWeapon() {
     updateHUD();
     void saveGame(true);
 }
+function enterDungeon(regionId) {
+    const progress=state.regionProgress[regionId], region=REGION_DATA[regionId];
+    const landmark=dungeonLandmarks.find(x=>x.regionId===regionId);
+    if(!region||!landmark||!isRegionUnlocked(regionId)){showToast('This dungeon is still sealed.');return;}
+    if(progress.dungeonCleared){showToast('This dungeon has already been cleared.');return;}
+    if(state.dungeonState){showToast('You are already inside a dungeon.');return;}
+    state.dungeonState={regionId,returnPosition:player.root.position.clone(),remaining:3};
+    landmark.roomMeshes.forEach(mesh=>mesh.setEnabled(true));
+    player.root.position.set(region.dungeonRoomPosition.x,0,region.dungeonRoomPosition.z+8);
+    positionCompanions();
+    for(let i=0;i<3;i++) addRegionalEnemy(regionId,new Vector3(region.dungeonRoomPosition.x+(i-1)*7,0,region.dungeonRoomPosition.z-5-(i%2)*5),i,true);
+    interactables.push({kind:'dungeonExit',regionId,label:'Leave the dungeon',position:new Vector3(region.dungeonRoomPosition.x,0,region.dungeonRoomPosition.z+11),mesh:landmark.room});
+    nearby=null;showToast(`Dungeon entered: ${region.name}. Defeat the three guardians to clear it.`,4);
+    updateHUD();
+}
+function exitDungeon() {
+    const dungeon=state.dungeonState;if(!dungeon)return;
+    const landmark=dungeonLandmarks.find(x=>x.regionId===dungeon.regionId);
+    if(landmark)landmark.roomMeshes.forEach(mesh=>mesh.setEnabled(false));
+    enemies.filter(e=>e.dungeonOnly&&e.regionId===dungeon.regionId&&!e.dead).forEach(e=>{e.dead=true;e.root.dispose();});
+    enemies=enemies.filter(e=>!e.dead);
+    interactables=interactables.filter(item=>item.kind!=='dungeonExit');
+    const returnPosition=dungeon.returnPosition;
+    state.dungeonState=null;
+    if(returnPosition)player.root.position.copyFrom(returnPosition);
+    positionCompanions();nearby=null;updateZoneFromPosition();
+    showToast('You leave the dungeon and return to the main trail.');updateHUD();void saveGame(true);
+}
+
 function interact() {
     if (state.paused || !nearby)
         return;
@@ -2821,6 +3359,12 @@ function interact() {
             break;
         case 'barracks':
             openPlanning(false);
+            break;
+        case 'dungeon':
+            enterDungeon(nearby.regionId);
+            break;
+        case 'dungeonExit':
+            exitDungeon();
             break;
         case 'crystal': {
             const crystalIndex = interactables.filter(item => item.kind === 'crystal').indexOf(nearby);
@@ -2847,8 +3391,10 @@ function updateNearby() {
             continue;
         if ((item.kind === 'planning' || item.kind === 'bed' || item.kind === 'hospital' || item.kind === 'blacksmith' || item.kind === 'barracks') && state.zone !== 'base')
             continue;
-        if (item.kind === 'crystal' && state.zone !== 'forest')
-            continue;
+        if (item.kind === 'crystal' && state.zone !== 'forest') continue;
+        if (item.kind === 'dungeon' && (item.regionId !== state.zone || state.dungeonState || state.regionProgress[item.regionId]?.dungeonCleared)) continue;
+        if (item.kind === 'dungeonExit' && !state.dungeonState) continue;
+        if (state.dungeonState && item.kind !== 'dungeonExit') continue;
         const d = distance(player.root.position, item.position);
         if (d < best) {
             best = d;
@@ -2871,14 +3417,25 @@ function startNewGame() {
     state.gold = 100; state.crystals = 0; state.tokens = 0; state.weaponLevel = 1;
     state.wolfKills = 0; state.bossUnlocked = false; state.bossDefeated = false;
     state.questComplete = false; state.aureliaRecruited = false; state.regionProgress = freshRegionProgress();
+    state.abilityLevels = { arcane:1, heal:1, nova:1, barrier:1, antiMagic:1, deathBeam:1 }; state.manaUpgradeLevel = 0; state.companionUpgradeLevels = {}; state.playerFrozenTimer = 0; state.dungeonState = null;
+    summonedAllies.forEach(a=>{if(a.root&&!a.root.isDisposed())a.root.dispose();if(a.material)a.material.dispose();}); summonedAllies=[];
+    activeBarriers.forEach(f=>{
+        if(f.root&&!f.root.isDisposed())f.root.dispose();
+        if(f.shellMaterial)f.shellMaterial.dispose();
+        if(f.shardMaterial)f.shardMaterial.dispose();
+        (f.shards||[]).forEach(sh=>{const mesh=sh.mesh||sh;if(mesh&&!mesh.isDisposed())mesh.dispose();});
+    }); activeBarriers=[];
+    dungeonLandmarks.forEach(landmark=>landmark.roomMeshes.forEach(mesh=>mesh.setEnabled(false)));
+    interactables = interactables.filter(item=>item.kind!=='dungeonExit');
     state.combatTimer = 0; state.attackCooldown = 0; state.nightSpawned = false; state.randomEventTimer = 0;
     state.command = 'follow'; state.formation = 'balanced'; state.strategy = 'protect';
-    state.defaultAbility = 'arcane'; state.abilityCooldowns.arcane = 0; state.abilityCooldowns.heal = 0; state.abilityCooldowns.nova = 0;
+    state.defaultAbility = 'arcane'; Object.keys(state.abilityCooldowns).forEach(id=>state.abilityCooldowns[id]=0);
     state.cutsceneActive = false; state.crystalsCollected.clear();
     for (const item of interactables) if (item.kind === 'crystal') { item.collected = false; item.mesh.setEnabled(true); }
     state.worldMinutes = 9 * 60; state.weatherIndex = 0; state.zone = 'base';
     companions.forEach((c, index) => {
-        c.active = index < 2; c.recruited = index < 2; c.hp = c.maxHp;
+        c.upgradeLevel = 0; c.maxHp = c._baseMaxHp || c.maxHp; c.hp = c.maxHp;
+        c.summonTimer = 20; c.specialCooldown = 0; c.active = index < 2; c.recruited = index < 2;
         c.recovering = false; c.recoverTimer = 0; c.command = null; c.ambientState = null;
         c.model.root.setEnabled(false);
     });
@@ -2952,8 +3509,7 @@ function updateWorldClock(dt) {
 }
 function updateEnemies(dt) {
     for (const enemy of enemies) {
-        if (enemy.dead || !enemy.root.isEnabled())
-            continue;
+        if (enemy.dead || !enemy.root.isEnabled()) continue;
         if (enemy.frozenTimer > 0) {
             enemy.frozenTimer = Math.max(0, enemy.frozenTimer - dt);
             if (enemy.frozenTimer <= 0) restoreFrozenEnemy(enemy);
@@ -2965,71 +3521,94 @@ function updateEnemies(dt) {
         }
         enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
         enemy.specialTimer = Math.max(0, enemy.specialTimer - dt);
-        let targetRoot = player.root;
-        let targetCompanion = null;
-        let d = distance(enemy.root.position, player.root.position);
-        for (const companion of activeCompanions()) {
-            const companionDistance = distance(enemy.root.position, companion.model.root.position);
-            if (companionDistance < d - 0.25) {
-                d = companionDistance;
-                targetRoot = companion.model.root;
-                targetCompanion = companion;
+        enemy.aggroTimer = Math.max(0, (enemy.aggroTimer || 0) - dt);
+        let targetRoot = null, targetCompanion = null, targetSummon = null;
+        // If someone damages a creature, it remembers and pursues that attacker rather than
+        // continuing to chase a random nearby character.
+        if (enemy.aggroTimer > 0 && enemy.aggroTarget && !enemy.aggroTarget.isDisposed?.() && enemy.aggroTarget.isEnabled?.() !== false) {
+            targetRoot = enemy.aggroTarget;
+            targetCompanion = activeCompanions().find(c => c.model.root === targetRoot) || null;
+            targetSummon = summonedAllies.find(a => a.root === targetRoot) || null;
+        }
+        if (!targetRoot) {
+            targetRoot = player.root;
+            let best = distance(enemy.root.position, player.root.position);
+            for (const companion of activeCompanions()) {
+                const d = distance(enemy.root.position, companion.model.root.position);
+                if (d < best) { best=d; targetRoot=companion.model.root; targetCompanion=companion; targetSummon=null; }
+            }
+            for (const summon of summonedAllies) {
+                if (summon.hp <= 0) continue;
+                const d = distance(enemy.root.position, summon.root.position);
+                if (d < best) { best=d; targetRoot=summon.root; targetSummon=summon; targetCompanion=null; }
             }
         }
-        const detectionRange = Math.min(enemy.detectionRange || enemy.aggro, (enemy.sightRadius || 24) - 0.1);
-        if (d <= detectionRange) {
-            state.combatTimer = 6;
-            const attackRange = enemy.kind === 'boss' ? 3.4 : 1.75;
-            if (d > attackRange)
-                moveToward(enemy.root, targetRoot.position, enemy.speed * (state.worldMinutes / 60 >= 20 ? 1.22 : 1), dt);
-            else if (enemy.attackTimer <= 0) {
-                const damage = enemy.damage * (state.worldMinutes / 60 >= 20 ? 1.2 : 1);
-                if (targetCompanion) {
-                    targetCompanion.hp = Math.max(0, targetCompanion.hp - damage);
-                    if (targetCompanion.hp <= 0) {
-                        targetCompanion.recovering = true;
-                        targetCompanion.recoverTimer = 7;
-                        targetCompanion.model.root.setEnabled(false);
-                        showToast(`${targetCompanion.name} was overwhelmed and has been sent to the base hospital to recover.`);
-                    }
-                }
-                else {
-                    state.hp = Math.max(0, state.hp - damage * (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 0.35 : state.protectionTimer > 0 ? 0.65 : 1));
-                    state.playerDamageFlash = 0.22;
-                    if (state.hp <= 0)
-                        playerDefeated();
-                }
-                enemy.attackTimer = enemy.kind === 'boss' ? 2.0 : 1.8;
-                if (enemy.kind === 'boss' && enemy.specialTimer <= 0) {
-                    enemy.specialTimer = 6;
-                    const bossRegion = REGION_DATA[enemy.regionId || 'forest'];
-                    burstEffect(enemy.root.position, bossRegion?.crystalMaterial || materials.fire, 5.1);
-                    if (distance(player.root.position, enemy.root.position) < 6)
-                        state.hp = Math.max(0, state.hp - 12);
-                    for (const companion of activeCompanions())
-                        if (distance(companion.model.root.position, enemy.root.position) < 6)
-                            companion.hp = Math.max(0, companion.hp - 12);
-                    showToast(`${enemy.displayName || bossRegion?.bossName || 'The boss'} unleashes a powerful shockwave!`);
-                    if (state.hp <= 0)
-                        playerDefeated();
-                }
+        let d = distance(enemy.root.position, targetRoot.position);
+        const detectionRange = Math.min(enemy.detectionRange || enemy.aggro || 22, (enemy.sightRadius || 30) - 0.1);
+        if (d > detectionRange && !(enemy.aggroTimer > 0)) continue;
+        state.combatTimer = 6;
+        const attackRange = enemy.kind === 'boss' ? 3.6 : targetSummon ? 2.2 : 1.9;
+        const barrier = hasActiveBarrierFor(targetRoot, false);
+        if (barrier && targetRoot === player.root || barrier && targetCompanion) {
+            const offset = targetRoot.position.subtract(player.root.position); offset.y=0;
+            if (offset.lengthSquared() < 0.01) offset.x=1;
+            offset.normalize();
+            const edge = player.root.position.add(offset.scale(barrier.radius + 1.1));
+            if (d < barrier.radius + 1.2) {
+                moveToward(enemy.root, edge, enemy.speed * 0.8, dt);
+                barrier.hp = Math.max(0, barrier.hp - Math.max(2, enemy.damage * 0.42) * dt);
+                updateBarrierCracks(barrier);
+                if (barrier.hp <= 0) breakBarrier(barrier);
+                continue;
             }
+        }
+        enemy.root.rotation.y = Math.atan2(targetRoot.position.x - enemy.root.position.x, targetRoot.position.z - enemy.root.position.z);
+        if (d > attackRange) moveToward(enemy.root, targetRoot.position, enemy.speed * (state.worldMinutes / 60 >= 20 ? 1.22 : 1), dt);
+        else if (enemy.attackTimer <= 0) {
+            const damage = enemy.damage * (state.worldMinutes / 60 >= 20 ? 1.2 : 1);
+            const normalBarrier = hasActiveBarrierFor(targetRoot, false);
+            if (normalBarrier && (targetRoot === player.root || targetCompanion)) {
+                normalBarrier.hp = Math.max(0, normalBarrier.hp - damage);
+                updateBarrierCracks(normalBarrier);
+                if (normalBarrier.hp <= 0) breakBarrier(normalBarrier);
+            } else if (targetSummon) {
+                targetSummon.hp = Math.max(0, targetSummon.hp - damage);
+            } else if (targetCompanion) {
+                targetCompanion.hp = Math.max(0, targetCompanion.hp - damage);
+                if (targetCompanion.hp <= 0) {
+                    targetCompanion.recovering = true; targetCompanion.recoverTimer = 7;
+                    targetCompanion.model.root.setEnabled(false);
+                    showToast(`${targetCompanion.name} was overwhelmed and needs to recover at the base hospital.`);
+                }
+            } else {
+                state.hp = Math.max(0, state.hp - damage * (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 0.35 : state.protectionTimer > 0 ? 0.65 : 1));
+                state.playerDamageFlash = 0.22;
+                if (state.hp <= 0) playerDefeated();
+            }
+            enemy.attackTimer = enemy.kind === 'boss' ? 1.75 : 1.45;
+        }
+        // Boss skills run on their own fifteen-second timer, not only after a melee strike.
+        if (enemy.kind === 'boss' && enemy.specialTimer <= 0) {
+            enemy.specialTimer = 15;
+            triggerBossSpecial(enemy);
         }
     }
     state.combatTimer = Math.max(0, state.combatTimer - dt);
     for (const c of companions) {
+        if (c.frozenTimer > 0) { c.frozenTimer = Math.max(0, c.frozenTimer - dt); if (c.frozenTimer <= 0 && c._preFreezeMaterial) { c.model.body.material = c._preFreezeMaterial; c._preFreezeMaterial = null; } }
         if (c.recovering && state.combatTimer <= 0) {
             c.recoverTimer = Math.max(0, c.recoverTimer - dt);
             if (c.recoverTimer <= 0) {
-                c.recovering = false;
-                c.hp = Math.max(25, Math.round(c.maxHp * 0.35));
+                c.recovering = false; c.hp = Math.max(25, Math.round(c.maxHp * 0.35));
                 c.model.root.setEnabled(c.active);
-                c.model.root.position.copyFrom(player.root.position.add(new Vector3(1.5, 0, 1.5)));
+                c.model.root.position.copyFrom(player.root.position.add(new Vector3(1.5,0,1.5)));
                 showToast(`${c.name} has recovered enough to rejoin the party.`);
             }
         }
     }
 }
+
+
 function updateCompanions(dt) {
     const selected = activeCompanions();
     selected.forEach((c, index) => {
@@ -3038,6 +3617,19 @@ function updateCompanions(dt) {
 
         c.attackTimer = Math.max(0, c.attackTimer - dt);
         c.healTimer = Math.max(0, c.healTimer - dt);
+        c.specialCooldown = Math.max(0, (c.specialCooldown || 0) - dt);
+        if (c.frozenTimer > 0) return;
+        if (c.role === 'Summoner') {
+            c.summonTimer = Math.max(0, (c.summonTimer ?? 20) - dt);
+            const ownedSummons = summonedAllies.filter(a => a.ownerId === c.id && a.hp > 0).length;
+            if (c.summonTimer <= 0) {
+                if (ownedSummons < 5) {
+                    spawnSummonedAlly(c, 50);
+                    showToast(`${c.name} calls a 50-HP spirit to the party. (${ownedSummons + 1}/5)`);
+                }
+                c.summonTimer = 20;
+            }
+        }
 
         // Aurelia's automatic support now uses the same drawn rune and rising green beam.
         if (c.role === 'Healer' && c.healTimer <= 0) {
@@ -3182,13 +3774,15 @@ function updateProjectiles(dt) {
         }
         if (t >= 1) {
             if (p.target && !p.target.dead)
-                dealDamage(p.target, p.damage);
+                dealDamage(p.target, p.damage, p.source || player.root);
             p.mesh.dispose();
             projectiles.splice(i, 1);
         }
     }
 }
 function updateMovement(dt) {
+    const positionBeforeMove = player.root.position.clone();
+    if (state.playerFrozenTimer > 0) { state.playerFrozenTimer = Math.max(0, state.playerFrozenTimer - dt); animateCharacterMovement(player, false, state.stepTime / 9); return; }
     let movement = Vector3.Zero();
     // Ask Babylon for the camera's real world-space axes so alpha, inertia and camera rotation
     // cannot cause W/S to reverse or drift when the view angle changes.
@@ -3220,8 +3814,17 @@ function updateMovement(dt) {
         animateCharacterMovement(player, false, state.stepTime / 9);
     }
     // Expanded continuous world bounds: headquarters, the original forest and all four new regions.
-    player.root.position.x = Math.max(-42, Math.min(202, player.root.position.x));
-    player.root.position.z = Math.max(-84, Math.min(214, player.root.position.z));
+    player.root.position.x = Math.max(12, Math.min(174, player.root.position.x));
+    player.root.position.z = Math.max(-1390, Math.min(112, player.root.position.z));
+    const candidateZone = regionAtPosition(player.root.position.x, player.root.position.z);
+    if (candidateZone && candidateZone !== 'base' && candidateZone !== state.zone && !isRegionUnlocked(candidateZone)) {
+        player.root.position.copyFrom(positionBeforeMove);
+        const nextRegion = REGION_DATA[candidateZone];
+        if (!state._lastLockedNotice || performance.now() - state._lastLockedNotice > 3500) {
+            showToast(`${nextRegion.name} is sealed. Defeat the previous boss and free its prisoner to continue.`);
+            state._lastLockedNotice = performance.now();
+        }
+    }
     updateZoneFromPosition();
     camera.target = Vector3.Lerp(camera.target, player.root.position.add(new Vector3(0, 1.25, 0)), 1 - Math.pow(0.001, dt));
     animateCharacterGuard(player, (keys.has('ShiftLeft') || keys.has('ShiftRight')) && playerClass === 'knight', dt);
@@ -3243,6 +3846,22 @@ function playerDefeated() {
 // -----------------------------------------------------------------------------
 // UI and input wiring.
 // -----------------------------------------------------------------------------
+function ensureUnlockedAbilityButtons() {
+    const bar=document.querySelector('.ability-bar');if(!bar)return;
+    const specs=[
+        {id:'barrier',key:'3',name:'Barrier',mp:'58 MP'},
+        {id:'antiMagic',key:'4',name:'Anti-Magic Barrier',mp:'88 MP'},
+        {id:'deathBeam',key:'5',name:'Death Beam',mp:'70 MP'}
+    ];
+    for(const spec of specs){
+        if(bar.querySelector(`[data-ability="${spec.id}"]`))continue;
+        const button=document.createElement('button');button.className='ability-button';button.dataset.ability=spec.id;
+        button.title=`${spec.key} · ${spec.name}`;
+        button.innerHTML=`<kbd>${spec.key}</kbd><strong>${spec.name}</strong><small>${spec.mp}</small>`;
+        bar.insertBefore(button,bar.querySelector('.ability-default'));
+    }
+}
+
 function bindButton(id, callback) { $(id).addEventListener('click', callback); }
 bindButton('new-game-button', startNewGame);
 bindButton('continue-button', () => { void continueGame(); });
@@ -3282,12 +3901,13 @@ bindButton('party-command-button', () => { if ($('command-overlay').classList.co
 bindButton('command-close-button', () => $('command-overlay').classList.add('hidden'));
 bindButton('main-menu-button', () => { $('pause-overlay').classList.add('hidden'); $('start-overlay').classList.remove('hidden'); state.paused = true; state.started = false; void saveGame(true); });
 bindButton('export-save-button', exportSave);
+ensureUnlockedAbilityButtons();
 bindButton('victory-return-button', () => { $('victory-overlay').classList.add('hidden'); state.paused = false; setZone('base'); showToast('The forest relic has been secured. The region is now cleared.'); void saveGame(true); });
 for (const button of Array.from(document.querySelectorAll('[data-ability]'))) {
     button.addEventListener('click', () => castAbility(button.dataset.ability));
 }
 $('default-ability-button').addEventListener('click', () => {
-    const ids = ['arcane', 'heal', 'nova'];
+    const ids = ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam'].filter(isAbilityUnlocked);
     const current = ids.indexOf(state.defaultAbility);
     state.defaultAbility = ids[(current + 1) % ids.length];
     updateHUD();
@@ -3316,7 +3936,7 @@ $('import-save-input').addEventListener('change', event => {
     reader.onload = () => {
         try {
             const data = JSON.parse(String(reader.result));
-            if (![2, 3].includes(data.version))
+            if (![2, 3, 4].includes(data.version))
                 throw new Error('Unsupported save version');
             applySave(data);
             void saveGame(true);
@@ -3385,8 +4005,10 @@ window.addEventListener('keydown', event => {
             castAbility('arcane');
         if (event.code === 'KeyQ')
             castAbility('heal');
-        if (event.code === 'Digit2')
-            castAbility('nova');
+        if (event.code === 'Digit2') castAbility('nova');
+        if (event.code === 'Digit3') castAbility('barrier');
+        if (event.code === 'Digit4') castAbility('antiMagic');
+        if (event.code === 'Digit5') castAbility('deathBeam');
         if (event.code === 'Tab') {
             const targets = enemies.filter(enemy => !enemy.dead && enemy.root.isEnabled());
             if (targets.length) {
@@ -3427,7 +4049,7 @@ const controlsHint = document.querySelector('.controls-hint');
 if (controlsHint && !controlsHint.dataset.commandShortcutsAdded) {
     controlsHint.dataset.commandShortcutsAdded = 'true';
     controlsHint.insertAdjacentHTML('beforeend',
-        ' <span>·</span><kbd>F</kbd> Follow <span>·</span><kbd>T</kbd> Attack <span>·</span><kbd>H</kbd> Hold <span>·</span><kbd>G</kbd> Defend <span>·</span><kbd>V</kbd> Advance');
+        ' <span>·</span><kbd>F</kbd> Follow <span>·</span><kbd>T</kbd> Attack <span>·</span><kbd>H</kbd> Hold <span>·</span><kbd>G</kbd> Defend <span>·</span><kbd>V</kbd> Advance <span>·</span><kbd>3–5</kbd> New abilities');
 }
 window.addEventListener('resize', () => engine.resize());
 // The planning menu is also reachable by pressing P while paused.
@@ -3457,6 +4079,10 @@ engine.runRenderLoop(() => {
         updateWorldClock(dt);
         state.protectionTimer = Math.max(0, state.protectionTimer - dt);
         updateMovement(dt);
+        updateRegionExploration(dt);
+        applyEnvironmentalHazards(dt);
+        updateBarrierFields(dt);
+        updateSummonedAllies(dt);
         state.attackCooldown = Math.max(0, state.attackCooldown - dt);
         const repeatAttackRange = playerClass === 'knight' || playerClass === 'warrior' ? 3.8 : 22;
         const repeatAttackCost = playerClass === 'knight' ? 0 :
@@ -3465,10 +4091,10 @@ engine.runRenderLoop(() => {
             state.mana >= repeatAttackCost && nearestEnemy(repeatAttackRange)) {
             attack();
         }
-        for (const id of ['arcane', 'heal', 'nova'])
+        for (const id of ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam'])
             state.abilityCooldowns[id] = Math.max(0, state.abilityCooldowns[id] - dt);
-        if (state.mana < 80 + (state.level - 1) * 8)
-            state.mana = Math.min(80 + (state.level - 1) * 8, state.mana + dt * 3.2);
+        if (state.mana < getMaxMana())
+            state.mana = Math.min(getMaxMana(), state.mana + dt * 3.2);
         if (state.combatTimer <= 0)
             state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + dt * 0.45);
         updateEnemies(dt);
@@ -3481,10 +4107,9 @@ engine.runRenderLoop(() => {
                 $('toast').classList.remove('visible');
         }
         state.playerDamageFlash = Math.max(0, state.playerDamageFlash - dt);
-        if (state.playerDamageFlash > 0)
-            player.body.material = materials.enemyEye;
-        else
-            player.body.material = playerOutfit;
+        if (state.playerFrozenTimer > 0) player.body.material = materials.ice;
+        else if (state.playerDamageFlash > 0) player.body.material = materials.enemyEye;
+        else player.body.material = playerOutfit;
         if (now - state.lastSaveTime > 45000) {
             state.lastSaveTime = now;
             void saveGame(true);
