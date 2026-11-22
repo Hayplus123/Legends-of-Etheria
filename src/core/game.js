@@ -898,6 +898,7 @@ function addWolf(position, stronger = false) {
             paw.material = materials.enemyDark;
         }
 
+    const tail = MeshBuilder.CreateCylinder('wolf raised tail', { height: 0.95, diameterTop: 0.06, diameterBottom: 0.25, tessellation: 8 }, scene);
     tail.parent = root;
     tail.position.set(0, 1.18, -0.78);
     tail.rotation.x = -0.78;
@@ -948,8 +949,6 @@ function addBoss() {
             leg.parent = root;
             leg.position.set(x, 0.58, z);
             leg.material = materials.enemyDark;
-
-    const tail = MeshBuilder.CreateCylinder('wolf raised tail', { height: 0.95, diameterTop: 0.06, diameterBottom: 0.25, tessellation: 8 }, scene);
                 const claw = MeshBuilder.CreateSphere('guardian root claw', { diameter: 0.48, segments: 8 }, scene);
             claw.parent = root;
             claw.position.set(x, 0.12, z + 0.12);
