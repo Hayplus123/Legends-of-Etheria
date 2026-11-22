@@ -898,11 +898,16 @@ function addWolf(position, stronger = false) {
             paw.material = materials.enemyDark;
         }
 
-    const tail = MeshBuilder.CreateCylinder('wolf raised tail', { height: 0.95, diameterTop: 0.06, diameterBottom: 0.25, tessellation: 8 }, scene);
-    tail.parent = root;
-    tail.position.set(0, 1.18, -0.78);
-    tail.rotation.x = -0.78;
-    tail.material = body.material;
+    const tail = MeshBuilder.CreateCylinder('wolf raised tail', {
+    height: 0.95,
+    diameterTop: 0.06,
+    diameterBottom: 0.25,
+    tessellation: 8
+}, scene);
+tail.parent = root;
+tail.position.set(0, 1.18, -0.78);
+tail.rotation.x = -0.78;
+tail.material = body.material;
     for (let i = 0; i < 5; i++) {
         const ruff = MeshBuilder.CreateSphere('wolf shoulder ruff', { diameter: 0.4, segments: 8 }, scene);
         ruff.parent = root;
