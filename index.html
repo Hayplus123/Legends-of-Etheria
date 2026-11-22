@@ -1,385 +1,197 @@
-
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#101a17">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111b19" />
+  <meta name="description" content="Legends of Etheria — a 3D fantasy RPG demo set in the Emerald Forest." />
+  <link rel="stylesheet" href="src/ui/style.css" />
   <title>Legends of Etheria — Emerald Forest Demo</title>
-  <link rel="stylesheet" href="src/ui/style.css">
 </head>
 <body>
-<main id="game-shell">
-  <canvas id="worldCanvas"></canvas>
-  <div id="phaser-fx" aria-hidden="true"></div>
-  <div class="cinema-vignette"></div>
+  <main id="game-shell">
+    <canvas id="game-canvas" aria-label="Legends of Etheria 3D game"></canvas>
+    <div id="weather-overlay" class="weather-overlay"></div>
 
-  <div class="topbar">
-    <div class="brand">
-      <span class="brand-symbol">✦</span>
-      <div>
-        <b>LEGENDS OF ETHERIA</b>
-        <small>EMERALD FOREST · FIRST PLAYABLE DEMO</small>
+    <div id="hud" class="hud">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">✦</span>
+          <div><div class="brand-name">LEGENDS OF ETHERIA</div><div class="brand-subtitle">EMERALD FOREST · COMPLETE DEMO</div></div>
+        </div>
+        <div class="top-actions">
+          <div class="world-info"><span id="world-clock">09:00 · MORNING</span><span id="weather-label">CLEAR</span></div>
+          <button id="return-base-button" class="top-button">Return to Base</button>
+          <button id="inventory-button" class="top-button">Inventory</button>
+          <button id="save-button" class="top-button">Save</button>
+          <button id="pause-button" class="top-button pause-button">Ⅱ</button>
+        </div>
+      </header>
+
+      <section class="status-card">
+        <div class="hero-line"><div><span id="hero-name" class="hero-name">WAYFARER</span><span id="hero-class" class="hero-class">WARRIOR</span></div><span id="level-label" class="level-label">LV 1</span></div>
+        <div class="stat-line"><span>HEALTH</span><span id="hp-value">120 / 120</span></div><div class="meter"><div id="hp-bar" class="meter-fill health"></div></div>
+        <div class="stat-line"><span>MANA</span><span id="mana-value">80 / 80</span></div><div class="meter"><div id="mana-bar" class="meter-fill mana"></div></div>
+        <div class="stat-line"><span>EXPERIENCE</span><span id="xp-value">0 / 100</span></div><div class="meter"><div id="xp-bar" class="meter-fill experience"></div></div>
+        <div class="economy-row"><span>✧ <b id="gold-value">100</b> gold</span><span>◈ <b id="crystal-value">0</b> crystals</span></div>
+      </section>
+
+      <section class="quest-card">
+        <div class="eyebrow">CURRENT QUEST</div>
+        <h2 id="objective-title">Prepare your first expedition</h2>
+        <p id="objective-detail">Visit the planning table and choose your party before entering the Emerald Forest.</p>
+        <div class="quest-progress"><span id="quest-progress-text">Expedition not started</span><div class="quest-track"><div id="quest-progress-bar"></div></div></div>
+      </section>
+
+      <section id="enemy-card" class="enemy-card hidden">
+        <div class="eyebrow">TARGET</div><div class="enemy-name" id="enemy-name">Forest Wolf</div>
+        <div class="enemy-hp-line"><span>HEALTH</span><span id="enemy-hp-value">70 / 70</span></div>
+        <div class="meter"><div id="enemy-hp-bar" class="meter-fill enemy-health"></div></div>
+      </section>
+
+      <section class="party-card">
+        <div class="panel-heading"><span>YOUR PARTY</span><button id="party-command-button" class="mini-button">Commands</button></div>
+        <div id="party-list" class="party-list"></div>
+      </section>
+
+      <div id="interaction-prompt" class="interaction-prompt hidden"><kbd>E</kbd> <span id="interaction-text">Interact</span></div>
+      <div id="toast" class="toast" role="status"></div>
+
+      <footer class="bottom-hud">
+        <div class="controls-hint"><kbd>W A S D</kbd> Move <span>·</span><kbd>WASD</kbd> Camera-relative move <span>·</span><kbd>Left-drag</kbd> Look <span>·</span><kbd>Wheel</kbd> Zoom <span>·</span><kbd>Space</kbd> Attack <span>·</span><kbd>Tab</kbd> Target <span>·</span><kbd>Shift</kbd> Defend <span>·</span><kbd>E</kbd> Interact</div>
+        <div class="ability-bar">
+          <button class="ability-button" data-ability="arcane" title="Left click / 1 · Arcane Bolt"><kbd>1</kbd><strong>Arcane Bolt</strong><small>12 MP</small></button>
+          <button class="ability-button" data-ability="heal" title="Q · Healing Wave"><kbd>Q</kbd><strong>Healing Wave</strong><small>18 MP</small></button>
+          <button class="ability-button" data-ability="nova" title="2 · Frost Nova"><kbd>2</kbd><strong>Frost Nova</strong><small>24 MP</small></button>
+          <button id="default-ability-button" class="ability-default">DEFAULT: ARCANE BOLT</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Start / character creation -->
+    <section id="start-overlay" class="screen-overlay">
+      <div class="modal start-modal">
+        <div class="eyebrow">A PARTY-BASED FANTASY RPG</div>
+        <div class="title-mark">✦</div>
+        <h1>Legends of Etheria</h1>
+        <h2>Emerald Forest</h2>
+        <p class="modal-copy">A complete first adventure. Build your party, explore the forest, uncover its secrets and face the guardian of the grove.</p>
+        <div class="creation-grid">
+          <label>Character name<input id="character-name-input" maxlength="18" value="Wayfarer" /></label>
+          <label>Starting class<select id="class-select"><option value="warrior">Warrior</option><option value="mage">Mage</option><option value="ranger">Ranger</option><option value="knight">Knight</option></select></label>
+          <label>Appearance<select id="appearance-select"><option value="emerald">Emerald cloak</option><option value="midnight">Midnight cloak</option><option value="sunrise">Sunrise cloak</option></select></label>
+        </div>
+        <div class="start-actions"><button id="new-game-button" class="primary-button">Begin new adventure</button><button id="continue-button" class="secondary-button" disabled>Continue saved game</button></div>
+        <div class="small-note">Complete Emerald Forest demo · Browser save · No account required</div>
       </div>
-    </div>
-    <div class="top-actions">
-      <span id="clockLabel">09:00 · MORNING</span>
-      <span id="weatherLabel">CLEAR</span>
-      <button id="returnBaseBtn">Return to base</button>
-      <button id="saveBtn">Save</button>
-      <button id="pauseBtn">Ⅱ</button>
-    </div>
+    </section>
+
+    <!-- Pause menu -->
+    <section id="pause-overlay" class="screen-overlay hidden">
+      <div class="modal compact-modal">
+        <div class="eyebrow">ADVENTURE PAUSED</div><h1>Paused</h1>
+        <p class="modal-copy">Take a moment. Your world is waiting.</p>
+        <div class="menu-grid">
+          <button id="resume-button" class="primary-button">Resume</button>
+          <button id="pause-planning-button" class="secondary-button">Planning table</button>
+          <button id="pause-inventory-button" class="secondary-button">Inventory & equipment</button>
+          <button id="pause-settings-button" class="secondary-button">Settings</button>
+          <button id="pause-base-button" class="secondary-button">Return to base</button>
+          <button id="pause-save-button" class="secondary-button">Save adventure</button>
+        </div>
+        <button id="main-menu-button" class="quiet-button">Return to main menu</button>
+      </div>
+    </section>
+
+    <!-- Planning table (also accessible from pause anywhere) -->
+    <section id="planning-overlay" class="screen-overlay hidden">
+      <div class="modal wide-modal">
+        <div class="eyebrow">EXPEDITION PREPARATION</div><h1>Planning Table</h1>
+        <p class="modal-copy">Choose your active companions and decide how the party will approach the expedition. Planning is available from the base or the pause menu.</p>
+        <div class="planning-grid">
+          <div class="planning-section"><h3>Active party</h3><p class="section-help">You can bring up to three companions alongside your hero.</p>
+            <label class="check-row"><input id="party-reaphel" type="checkbox" checked /> <span><b>Reaphel</b><small>Knight · Frontline defender</small></span></label>
+            <label class="check-row"><input id="party-sylva" type="checkbox" checked /> <span><b>Sylva</b><small>Archer · Ranged attacker</small></span></label>
+            <label class="check-row"><input id="party-aurelia" type="checkbox" /> <span><b>Aurelia</b><small>Forest healer · Recruit her in the forest</small></span></label>
+          </div>
+          <div class="planning-section"><h3>Formation</h3><p class="section-help">The healer prefers to remain behind the frontline.</p>
+            <label class="field-label">Formation<select id="formation-select"><option value="balanced">Balanced</option><option value="defensive">Defensive</option><option value="offensive">Offensive</option><option value="custom">Custom</option></select></label>
+            <label class="field-label">Combat strategy<select id="strategy-select"><option value="protect">Protect the hero</option><option value="focus">Focus the selected target</option><option value="hold">Hold position until ordered</option></select></label>
+            <div class="plan-tip">Defaults are already configured. You can depart without changing anything.</div>
+          </div>
+        </div>
+        <div class="modal-actions"><button id="planning-close-button" class="secondary-button">Close</button><button id="depart-button" class="primary-button">Depart for Emerald Forest</button></div>
+      </div>
+    </section>
+
+    <!-- Inventory / equipment -->
+    <section id="inventory-overlay" class="screen-overlay hidden">
+      <div class="modal wide-modal">
+        <div class="eyebrow">CHARACTER MANAGEMENT</div><h1>Inventory & Equipment</h1>
+        <div class="inventory-grid">
+          <div class="inventory-section"><h3>Equipped gear</h3><div class="gear-row"><span>Weapon</span><b id="weapon-name">Forest-forged blade</b></div><div class="gear-row"><span>Armour</span><b id="armour-name">Wayfarer leathers</b></div><div class="gear-row"><span>Weapon upgrade</span><b id="weapon-level">Level 1</b></div><button id="upgrade-weapon-button" class="secondary-button">Upgrade weapon · 75 gold</button></div>
+          <div class="inventory-section"><h3>Inventory</h3><div class="inventory-count"><span>Ether crystals</span><b id="inventory-crystals">0</b></div><div class="inventory-count"><span>Gold</span><b id="inventory-gold">100</b></div><div class="inventory-count"><span>Forest tokens</span><b id="inventory-tokens">0</b></div><p class="section-help">Find glowing crystals in the forest. Gold and rewards can be used for upgrades.</p><button id="export-save-button" class="secondary-button">Export save backup</button><label class="import-label">Import save backup<input id="import-save-input" type="file" accept="application/json,.json" /></label></div>
+        </div>
+        <div class="modal-actions"><button id="inventory-close-button" class="primary-button">Close</button></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="settings-overlay" class="screen-overlay hidden">
+      <div class="modal compact-modal"><div class="eyebrow">PREFERENCES</div><h1>Settings</h1>
+        <label class="setting-row"><span>Camera distance</span><input id="camera-distance" type="range" min="7" max="18" value="12" /></label>
+        <label class="setting-row"><span>Camera sensitivity</span><input id="camera-sensitivity" type="range" min="4" max="18" value="10" /></label>
+        <label class="setting-row"><span>Graphics quality</span><select id="graphics-quality"><option value="high">High</option><option value="medium">Medium</option><option value="low">Performance</option></select></label>
+        <div class="modal-actions"><button id="settings-close-button" class="primary-button">Done</button></div>
+      </div>
+    </section>
+
+    <!-- Right-click command menu -->
+    <section id="command-overlay" class="command-overlay hidden">
+      <div class="command-panel">
+        <div class="eyebrow">TACTICAL COMMANDS</div>
+        <h3 id="command-menu-title">Give an order</h3>
+        <p id="command-menu-subtitle">Choose an order for your active party.</p>
+        <div id="party-command-section">
+          <button data-command="follow">Follow me</button>
+          <button data-command="attack">Attack nearest enemy</button>
+          <button data-command="hold">Hold position</button>
+          <button data-command="defend">Defend the hero</button>
+          <button data-command="advance">Advance</button>
+        </div>
+        <div id="companion-command-section" class="hidden">
+          <button data-companion-command="follow">Follow me</button>
+          <button data-companion-command="attack">Attack selected target</button>
+          <button data-companion-command="hold">Hold position</button>
+          <button data-companion-command="protect">Protect me</button>
+          <button id="companion-ability-button" class="command-special">Use class ability</button>
+        </div>
+        <button id="command-close-button" class="command-close">Close</button>
+      </div>
+    </section>
+
+    <section id="victory-overlay" class="screen-overlay hidden">
+      <div class="modal compact-modal victory-modal"><div class="eyebrow">EMERALD FOREST · CLEARED</div><div class="title-mark">✧</div><h1>Guardian defeated</h1><p class="modal-copy">The corruption in the grove has faded. The Emerald Forest is now a cleared region, and its waygate is unlocked.</p><div class="reward-strip"><span>+300 XP</span><span>+250 Gold</span><span>+1 Forest Relic</span></div><button id="victory-return-button" class="primary-button">Return to base</button></div>
+    </section>
+  </main>
+  <div id="engine-error" class="engine-error hidden">
+    <div><strong>The game could not start.</strong><br />Check the details below. If the error mentions Babylon.js, check your internet connection and refresh.<pre id="engine-error-details">A startup error occurred.</pre></div>
   </div>
-
-  <section class="hero-panel panel">
-    <div class="hero-title">
-      <b id="heroName">WAYFARER</b>
-      <span id="heroClass">WARRIOR</span>
-      <i id="levelLabel">LV 1</i>
-    </div>
-
-    <div class="stat-label">
-      <span>HEALTH</span>
-      <span id="hpText">120 / 120</span>
-    </div>
-    <div class="bar"><i id="hpBar" class="hp"></i></div>
-
-    <div class="stat-label">
-      <span>MANA</span>
-      <span id="manaText">80 / 80</span>
-    </div>
-    <div class="bar"><i id="manaBar" class="mana"></i></div>
-
-    <div class="stat-label">
-      <span>EXPERIENCE</span>
-      <span id="xpText">0 / 100</span>
-    </div>
-    <div class="bar"><i id="xpBar" class="xp"></i></div>
-
-    <div class="currencies">
-      <span>✧ <b id="goldText">100</b> gold</span>
-      <span>◈ <b id="crystalText">0</b></span>
-    </div>
-  </section>
-
-  <section class="quest-panel panel">
-    <small>ACTIVE OBJECTIVE</small>
-    <h2 id="questTitle">Prepare your first expedition</h2>
-    <p id="questDetail">Visit the planning table and choose your party.</p>
-    <div class="quest-progress">
-      <span id="questProgress">Expedition not started</span>
-      <div class="bar"><i id="questBar"></i></div>
-    </div>
-  </section>
-
-  <section class="party-panel panel">
-    <div class="panel-head">
-      <b>YOUR PARTY</b>
-      <button id="commandsBtn">COMMANDS</button>
-    </div>
-    <div id="partyMembers"></div>
-  </section>
-
-  <section id="targetPanel" class="target-panel panel hidden">
-    <small>SELECTED TARGET</small>
-    <b id="targetName">Forest Wolf</b>
-    <div class="stat-label">
-      <span>HEALTH</span>
-      <span id="targetHpText">70 / 70</span>
-    </div>
-    <div class="bar"><i id="targetHpBar" class="enemy-hp"></i></div>
-  </section>
-
-  <div id="interactPrompt" class="interact-prompt hidden">
-    <kbd>E</kbd>
-    <span id="interactText">Interact</span>
-  </div>
-
-  <div id="toast" class="toast"></div>
-
-  <footer class="bottom-hud">
-    <div class="controls">
-      <kbd>W A S D</kbd> Move
-      <kbd>Mouse</kbd> Look/zoom
-      <kbd>SPACE</kbd> Attack
-      <kbd>SHIFT</kbd> Defend
-      <kbd>E</kbd> Interact
-      <kbd>ESC</kbd> Pause
-    </div>
-    <div class="abilities">
-      <button data-spell="bolt">
-        <kbd>1</kbd><b>ARCANE BOLT</b><small>12 MP</small>
-      </button>
-      <button data-spell="heal">
-        <kbd>Q</kbd><b>HEALING WAVE</b><small>18 MP</small>
-      </button>
-      <button data-spell="nova">
-        <kbd>2</kbd><b>FROST NOVA</b><small>24 MP</small>
-      </button>
-      <button id="defaultSpellBtn">DEFAULT: ARCANE</button>
-    </div>
-  </footer>
-
-  <section id="startScreen" class="overlay">
-    <div class="modal start-modal">
-      <div class="sigil">✦</div>
-      <small>A PARTY-BASED FANTASY RPG</small>
-      <h1>Legends of Etheria</h1>
-      <h2>Emerald Forest</h2>
-      <p>
-        Beyond the ancient stone path, a forgotten grove is waking.
-        Create your hero, gather your companions, and discover what
-        has corrupted the forest.
-      </p>
-
-      <div class="form-grid">
-        <label>
-          Hero name
-          <input id="nameInput" maxlength="18" value="Wayfarer">
-        </label>
-
-        <label>
-          Starting class
-          <select id="classInput">
-            <option value="warrior">Warrior</option>
-            <option value="mage">Mage</option>
-            <option value="ranger">Ranger</option>
-            <option value="knight">Knight</option>
-          </select>
-        </label>
-
-        <label>
-          Travel colours
-          <select id="lookInput">
-            <option value="emerald">Emerald green</option>
-            <option value="midnight">Midnight blue</option>
-            <option value="autumn">Autumn bronze</option>
-          </select>
-        </label>
-      </div>
-
-      <button id="beginAdventure" class="primary">Begin adventure</button>
-      <button id="continueAdventure" class="secondary" disabled>
-        Continue saved game
-      </button>
-      <small class="footnote">First playable milestone · Browser save · Single player</small>
-    </div>
-  </section>
-
-  <section id="pauseScreen" class="overlay hidden">
-    <div class="modal compact">
-      <small>ADVENTURE PAUSED</small>
-      <h1>Paused</h1>
-      <p>The forest can wait.</p>
-      <div class="button-grid">
-        <button id="resumeBtn" class="primary">Resume</button>
-        <button id="pausePlanningBtn" class="secondary">Planning table</button>
-        <button id="inventoryBtn" class="secondary">Inventory & equipment</button>
-        <button id="settingsBtn" class="secondary">Settings</button>
-        <button id="pauseBaseBtn" class="secondary">Return to base</button>
-        <button id="pauseSaveBtn" class="secondary">Save adventure</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="planningScreen" class="overlay hidden">
-    <div class="modal wide">
-      <small>EXPEDITION PREPARATION</small>
-      <h1>Planning Table</h1>
-      <p>
-        Choose your party and formation. You can also open this table
-        from the pause menu, wherever you are.
-      </p>
-
-      <div class="two-col">
-        <div class="subpanel">
-          <h3>Active companions</h3>
-
-          <label class="check">
-            <input id="useReaphel" type="checkbox" checked>
-            <span><b>Reaphel</b><small>Knight · Frontline defender</small></span>
-          </label>
-
-          <label class="check">
-            <input id="useSylva" type="checkbox" checked>
-            <span><b>Sylva</b><small>Ranger · Ranged attacker</small></span>
-          </label>
-
-          <label class="check">
-            <input id="useAurelia" type="checkbox" disabled>
-            <span><b>Aurelia</b><small>Healer · Recruit in the forest</small></span>
-          </label>
-        </div>
-
-        <div class="subpanel">
-          <h3>Formation & strategy</h3>
-          <label>
-            Formation
-            <select id="formationInput">
-              <option value="balanced">Balanced</option>
-              <option value="defensive">Defensive</option>
-              <option value="offensive">Offensive</option>
-            </select>
-          </label>
-
-          <label>
-            Combat strategy
-            <select id="strategyInput">
-              <option value="protect">Protect the hero</option>
-              <option value="focus">Focus selected target</option>
-            </select>
-          </label>
-          <p class="tip">Defaults are ready. You can depart without changing anything.</p>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="closePlanningBtn" class="secondary">Close</button>
-        <button id="departBtn" class="primary">Depart for Emerald Forest</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="inventoryScreen" class="overlay hidden">
-    <div class="modal wide">
-      <small>CHARACTER MANAGEMENT</small>
-      <h1>Inventory & Equipment</h1>
-
-      <div class="two-col">
-        <div class="subpanel">
-          <h3>Equipped gear</h3>
-          <p>Weapon <b id="weaponLevelText">Forest-forged blade · Lv 1</b></p>
-          <button id="upgradeWeaponBtn" class="secondary">
-            Upgrade weapon · 75 gold
-          </button>
-        </div>
-
-        <div class="subpanel">
-          <h3>Materials</h3>
-          <p>Gold <b id="inventoryGold">100</b></p>
-          <p>Ether crystals <b id="inventoryCrystals">0</b></p>
-          <button id="exportSaveBtn" class="secondary">Export save backup</button>
-          <label class="import-label">
-            Import save
-            <input id="importSaveInput" type="file" accept=".json,application/json">
-          </label>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="closeInventoryBtn" class="primary">Close</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="settingsScreen" class="overlay hidden">
-    <div class="modal compact">
-      <small>GAME PREFERENCES</small>
-      <h1>Settings</h1>
-      <label>
-        Camera distance
-        <input id="cameraDistance" type="range" min="8" max="20" value="13">
-      </label>
-      <label>
-        Camera sensitivity
-        <input id="cameraSensitivity" type="range" min="4" max="18" value="10">
-      </label>
-      <label>
-        Graphics quality
-        <select id="qualityInput">
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="performance">Performance</option>
-        </select>
-      </label>
-      <div class="modal-actions">
-        <button id="closeSettingsBtn" class="primary">Done</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="commandScreen" class="command-box hidden">
-    <small>PARTY ORDERS</small>
-    <button data-command="follow">Follow me</button>
-    <button data-command="attack">Attack target</button>
-    <button data-command="hold">Hold position</button>
-    <button data-command="defend">Defend the hero</button>
-    <button data-command="advance">Advance</button>
-    <button id="closeCommandsBtn">Close</button>
-  </section>
-
-  <section id="victoryScreen" class="overlay hidden">
-    <div class="modal compact victory">
-      <div class="sigil">✧</div>
-      <small>EMERALD FOREST · CLEARED</small>
-      <h1>The grove is free</h1>
-      <p>
-        The corruption has faded. The forest waygate is now unlocked,
-        and rare events may appear in this cleared region.
-      </p>
-      <div class="reward">+300 XP · +250 Gold · +1 Forest Relic</div>
-      <button id="victoryReturnBtn" class="primary">Return to base</button>
-    </div>
-  </section>
-
-  <div id="errorBanner" class="error-banner hidden"></div>
-</main>
-
-<!-- Browser libraries: no npm, build step, or terminal required. -->
-<script src="https://cdn.babylonjs.com/babylon.js"></script>
-<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-
-<!-- Core setup -->
-<script src="src/core/engine.js"></script>
-<script src="src/core/assetLoader.js"></script>
-<script src="src/core/materialAssets.js"></script>
-
-<!-- World -->
-<script src="src/world/regions.js"></script>
-
-<!-- Player -->
-<script src="src/player/player.js"></script>
-<script src="src/player/movement.js"></script>
-<script src="src/player/targeting.js"></script>
-<script src="src/player/revival.js"></script>
-
-<!-- Team -->
-<script src="src/team/teammates.js"></script>
-<script src="src/team/formations.js"></script>
-<script src="src/team/commands.js"></script>
-<script src="src/team/healerAI.js"></script>
-<script src="src/team/teamAI.js"></script>
-<script src="src/team/teamRevival.js"></script>
-
-<!-- Combat -->
-<script src="src/combat/combat.js"></script>
-<script src="src/combat/enemies.js"></script>
-<script src="src/combat/bosses.js"></script>
-<script src="src/combat/damage.js"></script>
-<script src="src/combat/abilities.js"></script>
-
-<!-- Progression -->
-<script src="src/progression/characterLevels.js"></script>
-<script src="src/progression/experience.js"></script>
-<script src="src/progression/equipment.js"></script>
-<script src="src/progression/upgrades.js"></script>
-
-<!-- Additional world systems -->
-<script src="src/world/quests.js"></script>
-<script src="src/world/respawning.js"></script>
-<script src="src/world/dungeons.js"></script>
-<script src="src/world/fastTravel.js"></script>
-
-<!-- General systems -->
-<script src="src/systems/inventory.js"></script>
-<script src="src/systems/economy.js"></script>
-<script src="src/systems/idle.js"></script>
-<script src="src/systems/settings.js"></script>
-
-<!-- Save system and game entry point -->
-<script src="src/core/saveManager.js"></script>
-<script src="src/core/game.js"></script>
-
+  <script>
+    window.addEventListener('error', function (event) {
+      var panel = document.getElementById('engine-error');
+      var details = document.getElementById('engine-error-details');
+      if (panel) panel.classList.remove('hidden');
+      if (details) details.textContent = event.message || 'A script failed to load.';
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      var panel = document.getElementById('engine-error');
+      var details = document.getElementById('engine-error-details');
+      if (panel) panel.classList.remove('hidden');
+      if (details) details.textContent = String(event.reason || 'An asynchronous startup task failed.');
+    });
+  </script>
+  <script src="https://cdn.babylonjs.com/babylon.js" onerror="document.getElementById('engine-error').classList.remove('hidden')"></script>
+  <script src="src/main.js" onerror="document.getElementById('engine-error').classList.remove('hidden')"></script>
 </body>
 </html>
