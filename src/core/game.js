@@ -1288,6 +1288,8 @@ guardianMarker.rotation.x = Math.PI / 2;
 guardianMarker.material = materials.gold;
 guardianNPC.root.setEnabled(false);
 guardianMarker.setEnabled(false);
+// Infinity allows every rescued companion to join the active party.
+const MAX_ACTIVE_COMPANIONS = Infinity;
 const companions = [
     { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
     { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
@@ -1453,7 +1455,7 @@ function finishRescueCutscene(skipped = false) {
     companion.hp = companion.maxHp;
     if (regionId === 'forest') state.aureliaRecruited = true;
     // The first rescue joins automatically. Later recruits become available in the planning table.
-    companion.active = regionId === 'forest' || activeCompanions().length < 3;
+    companion.active = regionId === 'forest' || activeCompanions().length < MAX_ACTIVE_COMPANIONS;
     companion.model.root.setEnabled(companion.active);
     if (companion.active) {
         companion.model.root.position.copyFrom(player.root.position.add(new Vector3(2 + (activeCompanions().length % 2), 0, 1.5)));
@@ -1668,7 +1670,7 @@ function finishRegionBossProgress(regionId) {
     // must finish the visible rescue cutscene before the next region unlocks.
     progress.rescued = true;
     const companion = companionById[region.companionId];
-    if (companion) { companion.recruited = true; companion.active = regionId === 'forest' || activeCompanions().length < 3; }
+    if (companion) { companion.recruited = true; companion.active = regionId === 'forest' || activeCompanions().length < MAX_ACTIVE_COMPANIONS; }
     if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = true; }
     updatePrisonCrystalVisibility();
     updateHUD();
@@ -2982,11 +2984,27 @@ function useCompanionAbility() {
 
 
 function formationOffset(index) {
-    if (state.formation === 'defensive')
-        return [new Vector3(-1.8, 0, 2), new Vector3(1.8, 0, 2), new Vector3(0, 0, 3.2)][index] ?? Vector3.Zero();
-    if (state.formation === 'offensive')
-        return [new Vector3(-1.1, 0, -2), new Vector3(1.1, 0, -2), new Vector3(0, 0, 2)][index] ?? Vector3.Zero();
-    return [new Vector3(-1.6, 0, 1.5), new Vector3(1.6, 0, 1.5), new Vector3(0, 0, 3)][index] ?? Vector3.Zero();
+    // Keep the original positions for the first three companions.
+    let firstRow;
+    if (state.formation === 'defensive') {
+        firstRow = [new Vector3(-1.8, 0, 2), new Vector3(1.8, 0, 2), new Vector3(0, 0, 3.2)];
+    } else if (state.formation === 'offensive') {
+        firstRow = [new Vector3(-1.1, 0, -2), new Vector3(1.1, 0, -2), new Vector3(0, 0, 2)];
+    } else {
+        firstRow = [new Vector3(-1.6, 0, 1.5), new Vector3(1.6, 0, 1.5), new Vector3(0, 0, 3)];
+    }
+    if (index < firstRow.length) return firstRow[index];
+
+    // Extra companions form orderly rows behind the first line instead of stacking
+    // on top of the hero when the party grows beyond three members.
+    const extraIndex = Math.max(0, Math.floor(index) - firstRow.length);
+    const columns = 3;
+    const row = Math.floor(extraIndex / columns) + 1;
+    const column = extraIndex % columns;
+    const x = (column - 1) * 1.9;
+    const baseZ = state.formation === 'defensive' ? 3.2 : state.formation === 'offensive' ? 2.0 : 3.0;
+    const rowSpacing = state.formation === 'defensive' ? 2.0 : 1.8;
+    return new Vector3(x, 0, baseZ + row * rowSpacing);
 }
 function moveToward(root, destination, speed, dt) {
     const delta = destination.subtract(root.position);
@@ -3124,6 +3142,8 @@ function closePause() { $('pause-overlay').classList.add('hidden'); state.paused
 function ensureCompanionPlanningControls() {
     const section = document.querySelector('#planning-overlay .planning-section');
     if (!section) return;
+    const partyNote = section.querySelector('.section-help');
+    if (partyNote) partyNote.textContent = 'Choose any number of rescued companions to join your expedition.';
     let list = section.querySelector('.extra-companion-options');
     if (!list) {
         list = document.createElement('div');
@@ -3163,14 +3183,14 @@ function applyPlanningSelections() {
         const input = document.getElementById(`party-${c.id}`);
         return c.recruited && !!input?.checked;
     });
-    if (chosen.length > 3) {
-        chosen.slice(3).forEach(c => {
-            const input = document.getElementById(`party-${c.id}`);
-            if (input) input.checked = false;
-        });
-        showToast('Your expedition can include up to three companions.');
+
+    // Apply the configured party limit. Infinity means every rescued companion.
+    const selected = chosen.slice(0, MAX_ACTIVE_COMPANIONS);
+    if (selected.length < chosen.length && Number.isFinite(MAX_ACTIVE_COMPANIONS)) {
+        showToast(`Your expedition can include up to ${MAX_ACTIVE_COMPANIONS} companions.`);
     }
-    const allowed = new Set(chosen.slice(0, 3).map(c => c.id));
+
+    const allowed = new Set(selected.map(c => c.id));
     companions.forEach(c => { c.active = c.recruited && allowed.has(c.id); });
     state.formation = $('formation-select').value;
     state.strategy = $('strategy-select').value;
