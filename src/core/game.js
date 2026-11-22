@@ -584,8 +584,27 @@ function animateCharacterGuard(model, guarding, dt = 0.16) {
     model.shield.rotation = Vector3.Lerp(model.shield.rotation, targetRotation, alpha);
 }
 
+// SIMPLE MAGIC-GLYPH SIZE CONTROLS:
+// Change MAGIC_GLYPH_SIZE_MULTIPLIER to resize every circle AND its star.
+// 1 = previous size, 2 = twice as large, 1.5 = 50% larger, etc.
+const MAGIC_GLYPH_SIZE_MULTIPLIER = 2;
+// Frost Nova's floor glyph has a radius equal to 2x the target's visible radius.
+const FROST_GLYPH_TARGET_RADIUS_MULTIPLIER = 2;
+
+function getTargetVisualRadius(target) {
+    if (!target || !target.root || target.root.isDisposed()) return 0.9;
+    try {
+        const bounds = target.root.getHierarchyBoundingVectors(true);
+        const width = bounds.max.x - bounds.min.x;
+        const depth = bounds.max.z - bounds.min.z;
+        return Math.max(width, depth) * 0.5;
+    } catch (error) {
+        return 0.9;
+    }
+}
+
 function drawMagicGlyph(position, color, options = {}, onComplete = null) {
-    const size = options.size || 0.72;
+    const size = (options.size || 0.72) * MAGIC_GLYPH_SIZE_MULTIPLIER;
     const floor = !!options.floor;
     const yaw = options.yaw || 0;
     const duration = options.duration || 760;
@@ -1433,7 +1452,7 @@ async function readSaveData() {
     }
     try {
         const raw = localStorage.getItem(SAVE_KEY);
-        return raw ? JSON.parse(raw) : null;
+                return raw ? JSON.parse(raw) : null;
     }
     catch {
         return null;
@@ -1782,8 +1801,10 @@ function castAbility(id) {
         // Hold the marked target still while its floor rune is drawn and the ice column rises.
         target.telegraphTimer = 1.4;
         const freezePosition = target.root.position.clone();
+        const targetRadius = getTargetVisualRadius(target);
+        const frostGlyphRadius = targetRadius * FROST_GLYPH_TARGET_RADIUS_MULTIPLIER;
         drawMagicGlyph(freezePosition.add(new Vector3(0, 0.055, 0)), new Color3(0.36, 0.88, 1),
-            { floor: true, size: 0.92, duration: 730 }, () => {
+            { floor: true, size: frostGlyphRadius / MAGIC_GLYPH_SIZE_MULTIPLIER, duration: 730 }, () => {
                 if (target.dead) return;
                 createRisingMagicBeam(target.root.position, new Color3(0.36, 0.88, 1), 2.65, 0.88, 620, () => {
                     if (!target.dead) {
