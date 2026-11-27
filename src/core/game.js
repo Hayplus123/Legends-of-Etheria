@@ -1412,14 +1412,7 @@ sylva.root.position.set(82, 0, 72);
 const aureliaModel = makeCharacter('Aurelia', mat('Aurelia healer robes', new Color3(0.42, 0.49, 0.34)), materials.crystal, 1, 'healer');
 aureliaModel.root.position.set(3.5 + FOREST_OFFSET.x, 0, -3.8 + FOREST_OFFSET.z);
 aureliaModel.root.setEnabled(false);
-// Additional character models retained for future content are placeholders until their exact roles and abilities
-// are planned with the player. Their recruitment is always gated behind their region boss.
-const darianModel = makeCharacter('Darian', mat('Darian emberguard armour', new Color3(0.52, 0.23, 0.15)), materials.emberGlow, 1.04, 'warrior');
-const nyraModel = makeCharacter('Nyra', mat('Nyra frostweave robes', new Color3(0.38, 0.57, 0.69)), materials.frostCrystal, 1, 'mage');
-const rowanModel = makeCharacter('Rowan', mat('Rowan mire summoner robes', new Color3(0.22, 0.34, 0.22)), materials.mireGlow, 1, 'summoner');
-const serenModel = makeCharacter('Seren', mat('Seren starfall robes', new Color3(0.57, 0.43, 0.24)), materials.starCrystal, 1, 'healer');
-[darianModel, nyraModel, rowanModel, serenModel].forEach(model => model.root.setEnabled(false));
-const guardianNPC = makeCharacter('Forest Guardian', mat('forest guardian cloak', new Color3(0.42, 0.48, 0.30)), materials.crystal, 1.02, 'mage');
+// Aurelia is the only additional companion in the Emerald Forest rescue.const guardianNPC = makeCharacter('Forest Guardian', mat('forest guardian cloak', new Color3(0.42, 0.48, 0.30)), materials.crystal, 1.02, 'mage');
 guardianNPC.root.position.set(4.5 + FOREST_OFFSET.x, 0, -3.5 + FOREST_OFFSET.z);
 const guardianStaffCrystal = MeshBuilder.CreateSphere('guardian staff crystal', { diameter: 0.35, segments: 8 }, scene);
 guardianStaffCrystal.parent = guardianNPC.root;
@@ -1432,11 +1425,12 @@ guardianMarker.rotation.x = Math.PI / 2;
 guardianMarker.material = materials.gold;
 guardianNPC.root.setEnabled(false);
 guardianMarker.setEnabled(false);
-// Infinity allows every Power Shard to join the active party.
+// Every unlocked companion can join the active party; Power Shards are progression rewards, not characters.
 const MAX_ACTIVE_COMPANIONS = Infinity;
 const companions = [
     { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 }
+    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
+    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 110, maxHp: 110, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 }
 ];
 for (const companion of companions) companion.model.root.metadata = { ...(companion.model.root.metadata || {}), companionId: companion.id };
 let selectedCompanion = null;
@@ -1474,6 +1468,22 @@ let activeRescueCutscene = null;
 let rescueCutsceneOverlay = null;
 const companionById = Object.fromEntries(companions.map(companion => [companion.id, companion]));
 for (const companion of companions) companion._baseMaxHp = companion.maxHp;
+
+function unlockAureliaHealer() {
+    const healer = companionById.aurelia;
+    if (!healer) return false;
+    const newlyRescued = !state.aureliaRecruited;
+    state.aureliaRecruited = true;
+    healer.recruited = true;
+    healer.active = true;
+    healer.recovering = false;
+    healer.recoverTimer = 0;
+    healer.hp = healer.maxHp;
+    healer.healTimer = 0;
+    healer.model.root.setEnabled(true);
+    positionCompanions();
+    return newlyRescued;
+}
 
 function ensureRescueOverlay() {
     if (rescueCutsceneOverlay) return rescueCutsceneOverlay;
@@ -1525,14 +1535,15 @@ function createPrisonCrystal(regionId) {
     return { regionId, root, crystal, shard, ring, halo, rune, cracks, material: crystalMaterial, shards: [], opened: false };
 }
 
-// Build one sealed Power Shard crystal for every region before the render loop starts.
-// The startup code calls this helper; each individual crystal is built by createPrisonCrystal().
+// Build every region's sealed Power Shard crystal once during startup.
 function createAllPrisonCrystals() {
-    for (const regionId of Object.keys(REGION_DATA)) {
-        if (prisonerCages[regionId]) continue;
-        const prison = createPrisonCrystal(regionId);
-        if (prison) prisonerCages[regionId] = prison;
+    for (const regionId of REGION_ORDER) {
+        if (!prisonerCages[regionId]) {
+            const prison = createPrisonCrystal(regionId);
+            if (prison) prisonerCages[regionId] = prison;
+        }
     }
+    updatePrisonCrystalVisibility();
 }
 
 function updatePrisonCrystalVisibility() {
@@ -1578,8 +1589,14 @@ function finishRescueCutscene(skipped = false) {
     const progress = state.regionProgress[regionId];
     if (!progress.shardClaimed) state.powerShards = (state.powerShards || 0) + 1;
     progress.shardClaimed = true;
-    progress.rescued = true; // retained as a compatibility flag for old saves and region gates
-    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = false; }
+    progress.rescued = true; // legacy save flag; this also records the cleared shard chamber
+    if (regionId === 'forest') {
+        state.bossDefeated = true;
+        state.questComplete = true;
+        unlockAureliaHealer();
+    }
+    state.powerShards = Math.max(state.powerShards || 0,
+        Object.values(state.regionProgress).filter(item => item.shardClaimed).length);
 
     camera.alpha = cameraSnapshot.alpha; camera.beta = cameraSnapshot.beta; camera.radius = cameraSnapshot.radius;
     camera.target.copyFrom(player.root.position.add(new Vector3(0, 1.2, 0)));
@@ -1610,14 +1627,20 @@ function finishRescueCutscene(skipped = false) {
         starfall: 'NEW POWER UNLOCKED: DEATH BEAM',
         mire: 'NEW POWER UNLOCKED: SUMMONER'
     };
-    if (regionId === 'starfall') {
+    if (regionId === 'forest') {
+        setObjective('Emerald Forest cleared', 'The Wildwood Power Shard is yours. Aurelia has been rescued and joined your party as its healer. The route to Emberfall is now open.');
+    } else if (regionId === 'starfall') {
         setObjective('Beyond the Starfall Expanse', 'The Starfall Power Shard has awakened. The route now opens into the Sunken Mire—and further lands remain beyond it.');
     } else if (regionId === 'mire') {
         setObjective('The Mire is not the end', 'The final known Power Shard has awakened. New routes can still appear beyond the known regions.');
     } else {
         setObjective(`${region.name} Power Shard claimed`, `${region.shardName} has joined your power reserve. The next region is now open.`);
     }
-    showToast(`${region.shardName} acquired! ${unlockMessages[regionId] || 'Power increased.'}`, 5.5);
+    if (regionId === 'forest') {
+        showToast('Wildwood Power Shard acquired! Aurelia has been rescued and joined your party.', 7);
+    } else {
+        showToast(`${region.shardName} acquired! ${unlockMessages[regionId] || 'Power increased.'}`, 5.5);
+    }
     void saveGame(true);
 }
 
@@ -1651,6 +1674,15 @@ function beginRescueCutscene(regionId) {
         finishRegionBossProgress(regionId);
         return;
     }
+    if (state.regionProgress[regionId]?.shardClaimed) return;
+    // The boss-death event begins the shard scene immediately, so explicitly enable
+    // the crystal rather than relying on the next regular HUD visibility refresh.
+    prison.root.setEnabled(true);
+    prison.crystal.setEnabled(true);
+    prison.shard.setEnabled(true);
+    prison.ring.setEnabled(true);
+    prison.halo.setEnabled(true);
+    prison.rune.setEnabled(true);
     const cameraSnapshot = {
         alpha: camera.alpha, beta: camera.beta, radius: camera.radius,
         target: camera.target.clone(), inertia: camera.inertia,
@@ -1801,9 +1833,13 @@ function finishRegionBossProgress(regionId) {
     if (!progress.shardClaimed) state.powerShards = (state.powerShards || 0) + 1;
     progress.shardClaimed = true;
     progress.rescued = true;
-    progress.shardClaimed = true;
-    state.powerShards = Math.max(state.powerShards || 0, Object.values(state.regionProgress).filter(p => p.shardClaimed).length);
-    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = false; }
+    state.powerShards = Math.max(state.powerShards || 0,
+        Object.values(state.regionProgress).filter(item => item.shardClaimed).length);
+    if (regionId === 'forest') {
+        state.bossDefeated = true;
+        state.questComplete = true;
+        unlockAureliaHealer();
+    }
     updatePrisonCrystalVisibility(); updateHUD(); void saveGame(true);
 }
 
@@ -2451,15 +2487,19 @@ function startCompanionConversation(active) {
     return true;
 }
 
-// These saved SVGs are full character portraits; keep the 3D body rig independent.
+// Neutral class icons are used in the party HUD; they are not extra characters.
+function makeRoleIcon(background, accent, symbol) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 200"><defs><linearGradient id="bg" x2="0" y2="1"><stop stop-color="${background}"/><stop offset="1" stop-color="#101b19"/></linearGradient></defs><rect width="160" height="200" rx="18" fill="url(#bg)"/><circle cx="80" cy="82" r="48" fill="${accent}" opacity=".16"/><path d="M32 186 Q40 132 80 128 Q120 132 128 186Z" fill="${accent}" opacity=".5"/><circle cx="80" cy="75" r="27" fill="#d8d1bd" opacity=".9"/><path d="M52 70 Q58 37 80 39 Q104 39 108 70 Q90 57 80 57 Q66 58 52 70Z" fill="#26332d"/><text x="80" y="98" text-anchor="middle" font-size="30" fill="${accent}" font-family="serif">${symbol}</text></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 const ROLE_PORTRAITS = {
-    knight: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+QnJhbm4sIEd1YXJkaWFuPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBzdGFsd2FydCBndWFyZGlhbiB3ZWFyaW5nIHRlYWwgc3RlZWwgYXJtb3VyIGFuZCBjYXJyeWluZyBhIGNyeXN0YWwgc2hpZWxkLjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4M2I0MyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEwMWIyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InN0ZWVsIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM4ZGQ4ZDQiLz48c3RvcCBvZmZzZXQ9Ii41IiBzdG9wLWNvbG9yPSIjM2M3Yzg3Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjAzYjUwIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic2hpZWxkIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkOWZmZmYiLz48c3RvcCBvZmZzZXQ9Ii40NSIgc3RvcC1jb2xvcj0iIzc4ZDdlNiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzMxNWM5MSIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjgiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYmRmYmZmIiBvcGFjaXR5PSIuNiI+PGNpcmNsZSBjeD0iMjgiIGN5PSIzMCIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTMyIiBjeT0iMzgiIHI9IjEuNSIvPjxwYXRoIGQ9Im0xMjMgNjAgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIvPjwvZz4KICA8cGF0aCBkPSJNMzAgMjAwIDQxIDEyM1E0NiAxMDUgNjMgOTlMNjMgODZIOTdMOTcgOTlRMTE0IDEwNiAxMjAgMTI3TDEyOSAyMDBaIiBmaWxsPSJ1cmwoI3N0ZWVsKSIgc3Ryb2tlPSIjOWZmNGYyIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxwYXRoIGQ9Ik02MSAxMDAgODAgMTE3IDk5IDEwMCA5OSAxNTEgODAgMTc0IDYxIDE1MVoiIGZpbGw9IiMxNzMzNDQiIHN0cm9rZT0iI2I3ZmZmOSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8cGF0aCBkPSJNNTIgNDQgNjIgMjUgODAgMTcgOTkgMjUgMTA5IDQ0IDEwNCA4MCA5NCA5NUg2Nkw1NiA4MFoiIGZpbGw9IiNiNjhhNjgiLz4KICA8cGF0aCBkPSJNNDYgNTMgNDcgMzIgNjEgMTcgODAgMTMgMTAwIDE3IDExNCAzNCAxMTMgNTcgMTAwIDQxIDk0IDMxIDgwIDM5IDY1IDMxIDU5IDQzWiIgZmlsbD0idXJsKCNzdGVlbCkiIHN0cm9rZT0iI2M1ZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTU5IDU5UTY3IDU0IDc0IDU5TTg3IDU5UTk0IDU0IDEwMSA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTcyYzNiIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MiA3NlE4MCA4MSA4OCA3NiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzg0ZTQzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik01OCA5MSA4MCAxMDYgMTAyIDkxIiBmaWxsPSJub25lIiBzdHJva2U9IiNlMGZmZmIiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik00MyAxMTUgMjEgMTM3IDM1IDE1NyA1OSAxMzNNMTE3IDExNSAxMzcgMTM4IDEyNCAxNTcgMTAxIDEzMyIgZmlsbD0idXJsKCNzdGVlbCkiIHN0cm9rZT0iI2E3ZmZmOSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTE4IDExNiAzNyAxMDQgNTUgMTIxIDUyIDE1MSAzNCAxNzAgMTUgMTUxWiIgZmlsbD0idXJsKCNzaGllbGQpIiBzdHJva2U9IiNlN2ZmZmYiIHN0cm9rZS13aWR0aD0iMiIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTM0IDExMyAzNSAxNTlNMjEgMTM3IDQ4IDEzNyIgc3Ryb2tlPSIjZWZmZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIgb3BhY2l0eT0iLjkiLz4KICA8cGF0aCBkPSJNNzEgMTM5IDgwIDE0NyA4OSAxMzlNNjggMTYwIDgwIDE2OCA5MiAxNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2JkZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2QwZmZmZiI+QlJBTk48L3RleHQ+Cjwvc3ZnPgo=',
-    warrior: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+VmVzcGVyYSwgUmlmdCBDaGFtcGlvbjwvdGl0bGU+PGRlc2MgaWQ9ImRlc2MiPkEgcG93ZXJmdWwgY2hhbXBpb24gaW4gZGFyayBjcmltc29uIGFybW9yIHdpdGggYSBnbG93aW5nIHJpZnQgYmxhZGUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNDcyMDM2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTcxMDI1Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYXJtb3IiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2E2NGI3NSIvPjxzdG9wIG9mZnNldD0iLjUiIHN0b3AtY29sb3I9IiM0YTIzNDciLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyMDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNmMGMyZDkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNhNDQ5ODAiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJibGFkZSIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjZmZlNGY1Ii8+PHN0b3Agb2Zmc2V0PSIuNDUiIHN0b3AtY29sb3I9IiNmYjc1Y2UiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM3OTI5YTQiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGZpbHRlciBpZD0iZ2xvdyI+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMyIgcmVzdWx0PSJiIi8+PGZlTWVyZ2U+PGZlTWVyZ2VOb2RlIGluPSJiIi8+PGZlTWVyZ2VOb2RlIGluPSJTb3VyY2VHcmFwaGljIi8+PC9mZU1lcmdlPjwvZmlsdGVyPgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjIwMCIgcng9IjE4IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMjIgMjggMTE0IDUwIDEyOCA2NCAxMTcgNzkgMTMzIDk2IDExOSAxMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2YzOGFjYyIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuNyIvPgogIDxnIGZpbGw9IiNmZmI4ZTciIG9wYWNpdHk9Ii44Ij48cGF0aCBkPSJtMzAgMzQgNCA5IDkgNC05IDQtNCA5LTQtOS05LTQgOS00eiIvPjxjaXJjbGUgY3g9IjEyNiIgY3k9IjI0IiByPSIyIi8+PGNpcmNsZSBjeD0iMzIiIGN5PSI4MSIgcj0iMS40Ii8+PC9nPgogIDxwYXRoIGQ9Ik0yOSAyMDAgMzkgMTIyUTQ0IDEwNCA2MSA5OUw2MSA4NkgxMDBMMTAwIDk5UTExNyAxMDcgMTIxIDEyOEwxMzAgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iI2VjOGNiZCIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjAgMTAxIDgwIDExOCAxMDAgMTAxIDEwMCAxNTEgODAgMTc2IDYwIDE1MVoiIGZpbGw9IiMyNTE2MmYiIHN0cm9rZT0iI2RjNmZhOSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8cGF0aCBkPSJNNTIgNDRRNTYgMTggODAgMThRMTA0IDIwIDExMCA0NkwxMDQgODAgOTUgOTdINjRMNTQgNzhaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ4IDYwUTQwIDMwIDYyIDE4TDc4IDI1IDk3IDE2UTExNyAzMyAxMTIgNjFMMTAxIDQ1IDkzIDM0IDc4IDQzIDYzIDM3IDU5IDU4WiIgZmlsbD0iIzQ0MjAzOCIgc3Ryb2tlPSIjZDk3OWFiIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxwYXRoIGQ9Ik02MCA2MFE2NyA1NCA3NCA2ME04NyA2MFE5NCA1NCAxMDEgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzMwMTUyYyIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzIgNzdRODAgODIgODggNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg0NDI2ZCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTggOTAgODAgMTA3IDEwMiA5MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZkM2VjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDMgMTE2IDIzIDE0MyAzOSAxNTMgNjEgMTMyTTExNyAxMTYgMTM3IDE0MyAxMjEgMTUzIDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iI2U5ODNiNiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTEyOSAxMzggMTQxIDg4IDE1MCA0NyAxNTQgOTAgMTQzIDE0M1oiIGZpbGw9InVybCgjYmxhZGUpIiBzdHJva2U9IiNmZmQzZjQiIHN0cm9rZS13aWR0aD0iMS4zIiBmaWx0ZXI9InVybCgjZ2xvdykiLz4KICA8cGF0aCBkPSJNMTQwIDE0MyAxNDEgMTY0IiBzdHJva2U9IiNkMGEwY2YiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTcwIDE0MCA4MCAxNDkgOTAgMTQwTTY4IDE1OSA4MCAxNjcgOTIgMTU5IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZjliZDciIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjg1Ii8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJtMTM3IDY0IDMgNyA3IDMtNyAzLTMgNy0zLTctNy0zIDctM3oiIGZpbGw9IiNmZmYwZmIiIHN0cm9rZT0iI2ZmOGVkNSIvPjwvZz4KICA8dGV4dCB4PSI4MCIgeT0iMTkwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2VyaWYiIGZvbnQtc2l6ZT0iMTAiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjZmZkMGViIj5WRVNQRVJBPC90ZXh0Pgo8L3N2Zz4K',
-    archer: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+T3Jpb24sIFN0YXIgUmFuZ2VyPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBjYWxtIHJhbmdlciBpbiBkZWVwIGJsdWUgYXJtb3Igd2l0aCBhIGx1bWlub3VzIHN0YXIgYm93LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4MmU1MCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiMTQyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImFybW9yIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM0YzgzYjAiLz48c3RvcCBvZmZzZXQ9Ii41NSIgc3RvcC1jb2xvcj0iIzI2NDU2ZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE1Mjc0NyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhhaXIiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2YwZDdhNSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzlhNzc0YyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJvdyIgeDI9IjEiIHkyPSIwIj48c3RvcCBzdG9wLWNvbG9yPSIjNmVkOGZmIi8+PHN0b3Agb2Zmc2V0PSIuNSIgc3RvcC1jb2xvcj0iI2U4ZmZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZlZDhmZiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjUiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYzdlZWZmIj48Y2lyY2xlIGN4PSIyMSIgY3k9IjMwIiByPSIxLjYiLz48Y2lyY2xlIGN4PSIxMjYiIGN5PSIyMiIgcj0iMS43Ii8+PGNpcmNsZSBjeD0iMTMzIiBjeT0iNjYiIHI9IjEuMyIvPjxjaXJjbGUgY3g9IjMzIiBjeT0iNzQiIHI9IjEuMiIvPjxwYXRoIGQ9Im0xMjcgMzkgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIgb3BhY2l0eT0iLjg1Ii8+PC9nPgogIDxwYXRoIGQ9Ik0zNCAyMDAgNDQgMTI1UTQ4IDEwNSA2MyAxMDFMNjMgODdIOThMOTggMTAxUTExNSAxMDYgMTE4IDEyOUwxMjcgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzhhZDRlZSIgc3Ryb2tlLXdpZHRoPSIxLjQiLz4KICA8cGF0aCBkPSJNNjMgMTA1IDgwIDExOSA5NyAxMDUgOTkgMTUyIDgwIDE3NSA2MSAxNTJaIiBmaWxsPSIjMTYzMDRlIiBzdHJva2U9IiM2OGMyZTgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU0IDQ3UTU4IDIwIDgxIDIxUTEwNSAyMCAxMDkgNDdMMTA1IDgyIDk1IDk5SDY0TDU0IDc5WiIgZmlsbD0idXJsKCNoYWlyKSIvPgogIDxwYXRoIGQ9Ik00OSA1OFE0MCAyOSA2OCAxN1E5MiA5IDEwOSAzMEwxMTIgNTQgMTAxIDQ2IDg5IDM0IDcyIDQzIDU5IDQwWiIgZmlsbD0iIzU5NGIzZCIgc3Ryb2tlPSIjY2ZiMjdiIiBzdHJva2Utd2lkdGg9IjEuMyIvPgogIDxwYXRoIGQ9Ik02MCA2MVE2NyA1NiA3MyA2MU04OCA2MVE5NSA1NiAxMDEgNjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIxMzI0OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzMgNzdRODAgODEgODcgNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg3Njg0YSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTkgOTEgODAgMTA4IDEwMSA5MSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTJkNGFjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDUgMTE3IDI2IDE0NCA0MSAxNTQgNjEgMTMyTTExNSAxMTcgMTM0IDE0NCAxMjAgMTU0IDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzcyY2FlYyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI4IDEyNFEzIDg4IDI2IDYxUTMxIDkyIDQxIDExMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2JvdykiIHN0cm9rZS13aWR0aD0iNCIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTI2IDYxIDMwIDEyNSIgc3Ryb2tlPSIjZWFmZmZmIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogIDxwYXRoIGQ9Ik0yNyA5NSAzOCA4OCIgc3Ryb2tlPSIjYjhlZGZmIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNzIgMTM5IDgwIDE0NSA4OCAxMzlNNjkgMTU5IDgwIDE2NiA5MSAxNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzljZTVmZiIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuODUiLz4KICA8ZyBmaWx0ZXI9InVybCgjZ2xvdykiPjxwYXRoIGQ9Im0zMCA4MSA0IDggOSA0LTkgNC00IDktNC05LTktNCA5LTR6IiBmaWxsPSIjZjRmZmZmIiBzdHJva2U9IiM3OWRmZmYiIHN0cm9rZS13aWR0aD0iMS40Ii8+PC9nPgogIDx0ZXh0IHg9IjgwIiB5PSIxOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJzZXJpZiIgZm9udC1zaXplPSIxMCIgbGV0dGVyLXNwYWNpbmc9IjIiIGZpbGw9IiNjOGYxZmYiPk9SSU9OPC90ZXh0Pgo8L3N2Zz4K',
-    ranger: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+T3Jpb24sIFN0YXIgUmFuZ2VyPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBjYWxtIHJhbmdlciBpbiBkZWVwIGJsdWUgYXJtb3Igd2l0aCBhIGx1bWlub3VzIHN0YXIgYm93LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4MmU1MCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiMTQyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImFybW9yIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM0YzgzYjAiLz48c3RvcCBvZmZzZXQ9Ii41NSIgc3RvcC1jb2xvcj0iIzI2NDU2ZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE1Mjc0NyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhhaXIiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2YwZDdhNSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzlhNzc0YyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJvdyIgeDI9IjEiIHkyPSIwIj48c3RvcCBzdG9wLWNvbG9yPSIjNmVkOGZmIi8+PHN0b3Agb2Zmc2V0PSIuNSIgc3RvcC1jb2xvcj0iI2U4ZmZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZlZDhmZiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjUiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYzdlZWZmIj48Y2lyY2xlIGN4PSIyMSIgY3k9IjMwIiByPSIxLjYiLz48Y2lyY2xlIGN4PSIxMjYiIGN5PSIyMiIgcj0iMS43Ii8+PGNpcmNsZSBjeD0iMTMzIiBjeT0iNjYiIHI9IjEuMyIvPjxjaXJjbGUgY3g9IjMzIiBjeT0iNzQiIHI9IjEuMiIvPjxwYXRoIGQ9Im0xMjcgMzkgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIgb3BhY2l0eT0iLjg1Ii8+PC9nPgogIDxwYXRoIGQ9Ik0zNCAyMDAgNDQgMTI1UTQ4IDEwNSA2MyAxMDFMNjMgODdIOThMOTggMTAxUTExNSAxMDYgMTE4IDEyOUwxMjcgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzhhZDRlZSIgc3Ryb2tlLXdpZHRoPSIxLjQiLz4KICA8cGF0aCBkPSJNNjMgMTA1IDgwIDExOSA5NyAxMDUgOTkgMTUyIDgwIDE3NSA2MSAxNTJaIiBmaWxsPSIjMTYzMDRlIiBzdHJva2U9IiM2OGMyZTgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU0IDQ3UTU4IDIwIDgxIDIxUTEwNSAyMCAxMDkgNDdMMTA1IDgyIDk1IDk5SDY0TDU0IDc5WiIgZmlsbD0idXJsKCNoYWlyKSIvPgogIDxwYXRoIGQ9Ik00OSA1OFE0MCAyOSA2OCAxN1E5MiA5IDEwOSAzMEwxMTIgNTQgMTAxIDQ2IDg5IDM0IDcyIDQzIDU5IDQwWiIgZmlsbD0iIzU5NGIzZCIgc3Ryb2tlPSIjY2ZiMjdiIiBzdHJva2Utd2lkdGg9IjEuMyIvPgogIDxwYXRoIGQ9Ik02MCA2MVE2NyA1NiA3MyA2MU04OCA2MVE5NSA1NiAxMDEgNjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIxMzI0OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzMgNzdRODAgODEgODcgNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg3Njg0YSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTkgOTEgODAgMTA4IDEwMSA5MSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTJkNGFjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDUgMTE3IDI2IDE0NCA0MSAxNTQgNjEgMTMyTTExNSAxMTcgMTM0IDE0NCAxMjAgMTU0IDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzcyY2FlYyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI4IDEyNFEzIDg4IDI2IDYxUTMxIDkyIDQxIDExMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2JvdykiIHN0cm9rZS13aWR0aD0iNCIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTI2IDYxIDMwIDEyNSIgc3Ryb2tlPSIjZWFmZmZmIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogIDxwYXRoIGQ9Ik0yNyA5NSAzOCA4OCIgc3Ryb2tlPSIjYjhlZGZmIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNzIgMTM5IDgwIDE0NSA4OCAxMzlNNjkgMTU5IDgwIDE2NiA5MSAxNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzljZTVmZiIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuODUiLz4KICA8ZyBmaWx0ZXI9InVybCgjZ2xvdykiPjxwYXRoIGQ9Im0zMCA4MSA0IDggOSA0LTkgNC00IDktNC05LTktNCA5LTR6IiBmaWxsPSIjZjRmZmZmIiBzdHJva2U9IiM3OWRmZmYiIHN0cm9rZS13aWR0aD0iMS40Ii8+PC9nPgogIDx0ZXh0IHg9IjgwIiB5PSIxOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJzZXJpZiIgZm9udC1zaXplPSIxMCIgbGV0dGVyLXNwYWNpbmc9IjIiIGZpbGw9IiNjOGYxZmYiPk9SSU9OPC90ZXh0Pgo8L3N2Zz4K',
-    mage: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+Tnl4LCBWb2lkIEFyY2FuaXN0PC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBteXN0ZXJpb3VzIG1hZ2UgaW4gbWlkbmlnaHQgcm9iZXMgd2l0aCBhIHZpb2xldCB2b2lkIGNyeXN0YWwuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjMjExODNlIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGIxMDI4Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icm9iZSIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNGUzOTdmIi8+PHN0b3Agb2Zmc2V0PSIuNTIiIHN0b3AtY29sb3I9IiMyNDFmNGQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxNDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkNmM4ZmYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2YTRhYTciLz48L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJvcmIiPjxzdG9wIHN0b3AtY29sb3I9IiNmMmQ4ZmYiLz48c3RvcCBvZmZzZXQ9Ii4yNSIgc3RvcC1jb2xvcj0iI2I3NzRmZiIvPjxzdG9wIG9mZnNldD0iLjcyIiBzdG9wLWNvbG9yPSIjNmMzY2NjIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjUxMzRjIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxmaWx0ZXIgaWQ9Imdsb3ciPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjMiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8cGF0aCBkPSJNMTQgMTc0IDMzIDk0IDUzIDcyIDEwOCA3MiAxMjggOTkgMTQ4IDE3NFoiIGZpbGw9IiM2ZDUwYWMiIG9wYWNpdHk9Ii4yIi8+CiAgPGcgZmlsbD0iI2M0YTlmZiIgb3BhY2l0eT0iLjciPjxwYXRoIGQ9Im0yNSAzMSA0IDkgOSA0LTkgNC00IDktNC05LTktNCA5LTR6Ii8+PHBhdGggZD0ibTEzMCA0NiAzIDcgNyAzLTcgMy0zIDctMy03LTctMyA3LTN6Ii8+PGNpcmNsZSBjeD0iMTIzIiBjeT0iMjUiIHI9IjIiLz48Y2lyY2xlIGN4PSIzNCIgY3k9Ijc3IiByPSIxLjgiLz48L2c+CiAgPHBhdGggZD0iTTM4IDIwMCA0MyAxMjdRNDcgMTA1IDYxIDEwMUw2MSA4OEg5OUw5OSAxMDFRMTEzIDEwNiAxMTcgMTI4TDEyMiAyMDBaIiBmaWxsPSJ1cmwoI3JvYmUpIiBzdHJva2U9IiM4ZDZiZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTYxIDEwMyA4MCAxMjcgOTkgMTAzIDEwMCAxNTUgODAgMTc2IDYwIDE1NVoiIGZpbGw9IiMxNzE1MjkiIHN0cm9rZT0iI2I0OGFmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjEgODlRNDcgNzIgNTQgNDVRNjAgMjQgODAgMjNRMTA0IDI0IDEwOSA0OFExMTQgNzQgOTkgODlMOTkgMTA3IDgwIDExOSA2MSAxMDZaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ5IDY1UTQzIDM1IDY1IDIyUTkwIDkgMTEwIDMzTDExNiA2NSAxMDQgNTMgOTUgMzcgNzggNDcgNjMgNDEgNjAgNjBaIiBmaWxsPSIjMjExYTNlIiBzdHJva2U9IiM5NjczZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU5IDYyUTY1IDU3IDcyIDYyTTg4IDYyUTk2IDU2IDEwMiA2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjExNjMzIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MyA3N1E4MCA4MSA4NyA3NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTczYzg0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik02MyA5MSA4MCAxMDQgOTcgOTEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2UwY2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTQ5IDEyMSAyNiAxNDMgNDAgMTUzIDYyIDEzNk0xMTEgMTIxIDEzNCAxNDIgMTIxIDE1NCA5OSAxMzYiIGZpbGw9InVybCgjcm9iZSkiIHN0cm9rZT0iIzlhN2FkNSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI2IDE0MyAxOCAxMzIgMjMgMTE0IDMwIDEyOCAzNiAxMzdaIiBmaWxsPSIjZDRjMmZmIi8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJNMjAgMTA1IDI4IDkyIDM2IDEwNSAyOCAxMTlaIiBmaWxsPSJ1cmwoI29yYikiIHN0cm9rZT0iI2UxYzdmZiIvPjxjaXJjbGUgY3g9IjI4IiBjeT0iMTA1IiByPSIzIiBmaWxsPSIjZmZmIi8+PC9nPgogIDxwYXRoIGQ9Ik02NCAxNDIgODAgMTUxIDk2IDE0Mk02OCAxNjIgODAgMTcwIDkyIDE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTk4NWU1IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2RmY2VmZiI+TllYPC90ZXh0Pgo8L3N2Zz4K',
-    summoner: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+Tnl4LCBWb2lkIEFyY2FuaXN0PC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBteXN0ZXJpb3VzIG1hZ2UgaW4gbWlkbmlnaHQgcm9iZXMgd2l0aCBhIHZpb2xldCB2b2lkIGNyeXN0YWwuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjMjExODNlIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGIxMDI4Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icm9iZSIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNGUzOTdmIi8+PHN0b3Agb2Zmc2V0PSIuNTIiIHN0b3AtY29sb3I9IiMyNDFmNGQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxNDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkNmM4ZmYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2YTRhYTciLz48L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJvcmIiPjxzdG9wIHN0b3AtY29sb3I9IiNmMmQ4ZmYiLz48c3RvcCBvZmZzZXQ9Ii4yNSIgc3RvcC1jb2xvcj0iI2I3NzRmZiIvPjxzdG9wIG9mZnNldD0iLjcyIiBzdG9wLWNvbG9yPSIjNmMzY2NjIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjUxMzRjIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxmaWx0ZXIgaWQ9Imdsb3ciPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjMiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8cGF0aCBkPSJNMTQgMTc0IDMzIDk0IDUzIDcyIDEwOCA3MiAxMjggOTkgMTQ4IDE3NFoiIGZpbGw9IiM2ZDUwYWMiIG9wYWNpdHk9Ii4yIi8+CiAgPGcgZmlsbD0iI2M0YTlmZiIgb3BhY2l0eT0iLjciPjxwYXRoIGQ9Im0yNSAzMSA0IDkgOSA0LTkgNC00IDktNC05LTktNCA5LTR6Ii8+PHBhdGggZD0ibTEzMCA0NiAzIDcgNyAzLTcgMy0zIDctMy03LTctMyA3LTN6Ii8+PGNpcmNsZSBjeD0iMTIzIiBjeT0iMjUiIHI9IjIiLz48Y2lyY2xlIGN4PSIzNCIgY3k9Ijc3IiByPSIxLjgiLz48L2c+CiAgPHBhdGggZD0iTTM4IDIwMCA0MyAxMjdRNDcgMTA1IDYxIDEwMUw2MSA4OEg5OUw5OSAxMDFRMTEzIDEwNiAxMTcgMTI4TDEyMiAyMDBaIiBmaWxsPSJ1cmwoI3JvYmUpIiBzdHJva2U9IiM4ZDZiZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTYxIDEwMyA4MCAxMjcgOTkgMTAzIDEwMCAxNTUgODAgMTc2IDYwIDE1NVoiIGZpbGw9IiMxNzE1MjkiIHN0cm9rZT0iI2I0OGFmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjEgODlRNDcgNzIgNTQgNDVRNjAgMjQgODAgMjNRMTA0IDI0IDEwOSA0OFExMTQgNzQgOTkgODlMOTkgMTA3IDgwIDExOSA2MSAxMDZaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ5IDY1UTQzIDM1IDY1IDIyUTkwIDkgMTEwIDMzTDExNiA2NSAxMDQgNTMgOTUgMzcgNzggNDcgNjMgNDEgNjAgNjBaIiBmaWxsPSIjMjExYTNlIiBzdHJva2U9IiM5NjczZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU5IDYyUTY1IDU3IDcyIDYyTTg4IDYyUTk2IDU2IDEwMiA2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjExNjMzIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MyA3N1E4MCA4MSA4NyA3NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTczYzg0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik02MyA5MSA4MCAxMDQgOTcgOTEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2UwY2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTQ5IDEyMSAyNiAxNDMgNDAgMTUzIDYyIDEzNk0xMTEgMTIxIDEzNCAxNDIgMTIxIDE1NCA5OSAxMzYiIGZpbGw9InVybCgjcm9iZSkiIHN0cm9rZT0iIzlhN2FkNSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI2IDE0MyAxOCAxMzIgMjMgMTE0IDMwIDEyOCAzNiAxMzdaIiBmaWxsPSIjZDRjMmZmIi8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJNMjAgMTA1IDI4IDkyIDM2IDEwNSAyOCAxMTlaIiBmaWxsPSJ1cmwoI29yYikiIHN0cm9rZT0iI2UxYzdmZiIvPjxjaXJjbGUgY3g9IjI4IiBjeT0iMTA1IiByPSIzIiBmaWxsPSIjZmZmIi8+PC9nPgogIDxwYXRoIGQ9Ik02NCAxNDIgODAgMTUxIDk2IDE0Mk02OCAxNjIgODAgMTcwIDkyIDE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTk4NWU1IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2RmY2VmZiI+TllYPC90ZXh0Pgo8L3N2Zz4K',
-    healer: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMzAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+RWxvd2VuLCBzcGlyaXQgcmV2aXZlcjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgZmFudGFzeSBoZWFsZXIgd2VhcmluZyBhIGRlZXAgZm9yZXN0LWdyZWVuIGhvb2QsIHdpdGggZ2xvd2luZyB0ZWFsIGV5ZXMgYW5kIGEgY3J5c3RhbCBwZW5kYW50LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMTgzZDNhIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE3MTUyZCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iY2xvYWsiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMmM3NjYwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE3M2EzZCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iY3J5c3RhbCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNkOGZmZjMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIwLjUiIHN0b3AtY29sb3I9IiM3NmYyZGMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGI5YWZmIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJnbG93Ij4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjN2ZmZmUyIiBzdG9wLW9wYWNpdHk9Ii40NSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM3ZmZmZTIiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIzMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSIxNDUiIHI9IjExMiIgZmlsbD0idXJsKCNnbG93KSIvPgogIDxwYXRoIGQ9Ik0zMyAzMDAgUTM1IDIyNSA3MSAyMDQgTDg4IDE4OCBMMTUxIDE4OCBMMTc0IDIwNSBRMjA4IDIyNSAyMTAgMzAwWiIgZmlsbD0idXJsKCNjbG9haykiIHN0cm9rZT0iIzc1ZDliYSIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNjEgMTE0IFEzNyAzOSAxMjEgMTkgUTIwMSAyOCAxODEgMTE4IEwxNjkgMTk2IEw3MCAxOTZaIiBmaWxsPSIjMTUzMzMyIiBzdHJva2U9IiM2ZWM1YTgiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik02NiAxMDUgUTc4IDUzIDEyMCA0MyBRMTU5IDUxIDE3NSAxMDUgTDE1OCAxNjkgUTE0MyAxOTAgMTIwIDE5MSBROTEgMTg3IDc4IDE2NVoiIGZpbGw9IiNkY2FlOTEiIHN0cm9rZT0iIzhjNmI2OSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTY0IDExNiBRNTYgNTUgMTE1IDI5IFExNzEgMzMgMTg0IDk3IEwxNzAgMTMwIEwxNTkgODYgUTEyNiAxMDMgODIgODYgTDc1IDEzM1oiIGZpbGw9IiMyMTRiNDMiIHN0cm9rZT0iIzc1ZDliYSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTg2IDEyNiBROTYgMTE3IDEwNiAxMjUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNkM2I0NSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMTM1IDEyNSBRMTQ1IDExNyAxNTUgMTI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMzZDNiNDUiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGVsbGlwc2UgY3g9Ijk4IiBjeT0iMTMyIiByeD0iNiIgcnk9IjQiIGZpbGw9IiM3NWZmZTIiLz4KICA8ZWxsaXBzZSBjeD0iMTQ1IiBjeT0iMTMyIiByeD0iNiIgcnk9IjQiIGZpbGw9IiM3NWZmZTIiLz4KICA8cGF0aCBkPSJNMTE1IDEzNyBMMTA5IDE1MSBMMTIxIDE1MyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYWQ3Zjc0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xMDUgMTY0IFExMjAgMTcxIDEzNiAxNjMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzgyNWI2MSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03OSAxOTMgUTEyMCAyMjIgMTYxIDE5MyBMMTc1IDIyMiBRMTQ2IDI0NSAxMjAgMjQ1IFE5NCAyNDUgNjUgMjIyWiIgZmlsbD0iIzJiNjU1NSIgc3Ryb2tlPSIjN2NlM2M0IiBzdHJva2Utb3BhY2l0eT0iLjY1IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNMTIwIDIwNyBMMTM5IDIyOSBMMTIwIDI1OSBMMTAxIDIyOVoiIGZpbGw9InVybCgjY3J5c3RhbCkiIHN0cm9rZT0iI2Q4ZmZmMyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTEyMCAyMDcgTDEyMCAyNTkgTTEwMSAyMjkgTDEzOSAyMjkiIHN0cm9rZT0iI2VmZmZmYiIgc3Ryb2tlLW9wYWNpdHk9Ii44IiBzdHJva2Utd2lkdGg9IjEuNCIvPgogIDxwYXRoIGQ9Ik00NyAxODkgUTI2IDE2NCA0MyAxMzggUTUzIDE1NSA1OCAxNjcgUTYzIDE0OSA3NyAxNDIgUTc3IDE3NyA2MCAxOTBaIiBmaWxsPSIjNDk5OTc1IiBzdHJva2U9IiM4NmU1YjgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTE5MyAxODkgUTIxNiAxNjMgMTk3IDEzNiBRMTg4IDE1NSAxODIgMTY4IFExNzcgMTUwIDE2NCAxNDMgUTE2NCAxNzcgMTgxIDE5MFoiIGZpbGw9IiM0OTk5NzUiIHN0cm9rZT0iIzg2ZTViOCIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8Y2lyY2xlIGN4PSI0NyIgY3k9Ijg1IiByPSI0IiBmaWxsPSIjOWNmZmUzIi8+CiAgPGNpcmNsZSBjeD0iMTk0IiBjeT0iNzciIHI9IjMiIGZpbGw9IiM5Y2ZmZTMiLz4KICA8cGF0aCBkPSJNMzYgMjMyIGw1IDkgMTAgMiAtOCA3IDIgMTAgLTkgLTUgLTkgNSAyIC0xMCAtOCAtNyAxMCAtMloiIGZpbGw9IiM5Y2ZmZTMiIG9wYWNpdHk9Ii44NSIvPgogIDxwYXRoIGQ9Ik0xOTggMjE1IGw0IDcgOCAxIC02IDYgMSA4IC03IC00IC03IDQgMSAtOCAtNiAtNiA4IC0xWiIgZmlsbD0iI2I4YjlmZiIgb3BhY2l0eT0iLjkiLz4KPC9zdmc+Cg=='
+    knight: makeRoleIcon('#29434b', '#b7d8d0', '✦'),
+    archer: makeRoleIcon('#28462f', '#a5d98d', '➶'),
+    warrior: makeRoleIcon('#4b302d', '#e3b18c', '⚔'),
+    ranger: makeRoleIcon('#28462f', '#a5d98d', '➶'),
+    healer: makeRoleIcon('#244b45', '#9ff1cf', '✚'),
+    mage: makeRoleIcon('#34305b', '#b8b6ff', '✧'),
+    summoner: makeRoleIcon('#3b304d', '#d7b7ff', '◈')
 };
 
 function updateQuestProgress() {
@@ -2469,9 +2509,41 @@ function updateQuestProgress() {
     const required = getRequiredKills(regionId);
     const pct = progress.bossDefeated ? 100 : progress.bossUnlocked ? 84 : progress.kills / required * 68;
     $('quest-progress-bar').style.width = `${pct}%`;
-    $('quest-progress-text').textContent = progress.bossDefeated
+    $('quest-progress-text').textContent = progress.shardClaimed
         ? `${region.name} cleared · ${region.shardName} acquired`
-        : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / ${required} threats defeated · ${Math.min(60, Math.floor(progress.elapsed || 0))}/60 sec`;
+        : progress.bossDefeated
+            ? `${region.bossName} defeated · Power Shard chamber awaiting collection`
+            : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / ${required} threats defeated · ${Math.min(60, Math.floor(progress.elapsed || 0))}/60 sec`;
+}
+
+function ensurePowerShardHUD() {
+    let panel = document.getElementById('power-shard-hud');
+    if (panel) return panel;
+    const statusCard = document.querySelector('.status-card');
+    if (!statusCard) return null;
+    panel = document.createElement('div');
+    panel.id = 'power-shard-hud';
+    panel.setAttribute('aria-live', 'polite');
+    panel.style.cssText = 'margin-top:9px;padding-top:8px;border-top:1px solid rgba(190,216,195,.18);color:#dbe9d8;font:11px/1.4 system-ui,sans-serif;';
+    const economy = statusCard.querySelector('.economy-row');
+    if (economy) economy.insertAdjacentElement('afterend', panel);
+    else statusCard.appendChild(panel);
+    return panel;
+}
+
+function updatePowerShardHUD() {
+    const panel = ensurePowerShardHUD();
+    if (!panel) return;
+    const claimed = REGION_ORDER.filter(id => state.regionProgress[id]?.shardClaimed)
+        .map(id => REGION_DATA[id].shardName);
+    const waiting = REGION_ORDER.filter(id => state.regionProgress[id]?.bossDefeated && !state.regionProgress[id]?.shardClaimed);
+    const names = claimed.length
+        ? claimed.map(name => `<span style="display:inline-block;margin:3px 4px 0 0;padding:3px 7px;border:1px solid rgba(133,224,179,.42);border-radius:999px;background:rgba(24,83,58,.42);color:#bff6d5">✦ ${name}</span>`).join('')
+        : '<span style="color:#a9b9ad">None collected yet</span>';
+    const pending = waiting.length
+        ? `<div style="margin-top:4px;color:#f0d18b">A Power Shard is waiting in the ${REGION_DATA[waiting[0]].name} crystal.</div>`
+        : '';
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b style="letter-spacing:.1em;color:#e4d5a5">POWER SHARDS</b><b style="color:#bff6d5">${claimed.length} / ${REGION_ORDER.length}</b></div><div>${names}</div>${pending}`;
 }
 
 function updateHUD() {
@@ -2541,6 +2613,7 @@ function updateHUD() {
     else
         enemyCard.classList.add('hidden');
     updateQuestProgress();
+    updatePowerShardHUD();
     updateUpgradePanel();
 }
 // -----------------------------------------------------------------------------
@@ -2674,8 +2747,11 @@ function applySave(data) {
     state.powerShards = Math.max(state.powerShards || 0, Object.values(state.regionProgress).filter(p => p.shardClaimed).length);
     state.bossDefeated = state.regionProgress.forest.bossDefeated;
     state.bossUnlocked = state.regionProgress.forest.bossUnlocked;
-    state.aureliaRecruited = false;
-    state.powerShards = Math.max(0, Number(data.powerShards) || Object.values(state.regionProgress).filter(p => p.shardClaimed || p.rescued).length);
+    // Clearing the Emerald Forest is the rescue condition for Aurelia. Older saves
+    // may have the shard flag but no healer flag, so migrate those saves forward.
+    state.aureliaRecruited = !!data.aureliaRecruited || !!state.regionProgress.forest.bossDefeated || !!state.regionProgress.forest.shardClaimed;
+    state.powerShards = Math.max(Number(data.powerShards) || 0,
+        Object.values(state.regionProgress).filter(p => p.shardClaimed || p.rescued).length);
     state.healthUpgradeLevel = Math.max(0, Math.min(10, Number(data.healthUpgradeLevel) || 0));
     state.summonTimer = Math.max(0, Number(data.summonTimer) || 20);
     state.formation = data.formation || 'balanced';
@@ -2693,15 +2769,14 @@ function applySave(data) {
         item.mesh.setEnabled(!collected);
     });
     for (const c of companions) {
-        c.recruited = true;
+        c.recruited = c.id === 'aurelia' ? state.aureliaRecruited : true;
         c.upgradeLevel = Math.max(0, Math.min(10, Number(state.companionUpgradeLevels[c.id]) || 0));
         c.maxHp = (c._baseMaxHp || c.maxHp) + c.upgradeLevel * 20;
         c.hp = Math.min(c.maxHp, Number(data.companionHP?.[c.id]) || c.maxHp);
-        c.active = data.partyActive ? !!data.partyActive[c.id] : true;
+        const hasSavedActive = data.partyActive && Object.prototype.hasOwnProperty.call(data.partyActive, c.id);
+        c.active = hasSavedActive ? !!data.partyActive[c.id] : (c.id === 'aurelia' ? state.aureliaRecruited : true);
+        if (c.id === 'aurelia' && !c.recruited) c.active = false;
     }
-    // Old regional recruits are now represented by Power Shards, never by new party members.
-    state.aureliaRecruited = false;
-    for (const c of companions) c.recruited = true;
     let savedX = Number(data.playerX);
     let savedZ = Number(data.playerZ);
     if (!Number.isFinite(savedX)) savedX = state.zone === 'base' ? 80 : REGION_DATA[state.zone]?.center.x ?? 80;
@@ -3482,7 +3557,6 @@ function resolveActorOverlaps() {
     for (const ally of summonedAllies) {
         if (ally.hp > 0) addActor(ally.root, 0.34);
     }
-    addActor(aureliaModel?.root, 0.46, true);
     addActor(guardianNPC?.root, 0.48, true);
 
     for (let pass = 0; pass < 3; pass++) {
@@ -3667,10 +3741,11 @@ function ensureCompanionPlanningControls() {
     const section = document.querySelector('#planning-overlay .planning-section');
     if (!section) return;
     const partyNote = section.querySelector('.section-help');
-    if (partyNote) partyNote.textContent = 'Choose your starting companions. New regions reward Power Shards instead of additional party members.';
-    // Remove the old healer recruitment checkbox from earlier versions of the planning UI.
-    const legacyAurelia = document.getElementById('party-aurelia');
-    if (legacyAurelia) legacyAurelia.closest('label')?.remove();
+    if (partyNote) partyNote.textContent = 'Reaphel and Sylva begin with you. Clear the Emerald Forest to rescue Aurelia, then choose whether she joins each expedition.';
+    const aureliaInput = document.getElementById('party-aurelia');
+    const aureliaLabel = aureliaInput?.closest('label');
+    const aureliaNote = aureliaLabel?.querySelector('small');
+    if (aureliaNote) aureliaNote.textContent = state.aureliaRecruited ? 'Healer · Rescued from the Emerald Forest' : 'Healer · Rescue her by clearing the Emerald Forest';
     const list = section.querySelector('.extra-companion-options');
     if (list) list.remove();
 }
@@ -3768,7 +3843,9 @@ function updateUpgradePanel() {
     };
     const manaLevel=state.manaUpgradeLevel||0;
     let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3 style="margin:0;font:600 16px Georgia,serif">Upgrades & Training</h3><b style="color:#e3c97e">${money} gold</b></div><p style="margin:6px 0 10px;font:12px system-ui;color:#bac9be">Upgrade costs increase automatically with each level. Spend gold to strengthen your health, mana, abilities and current party.</p>`;
-    html+=`<div style="padding:8px 0;color:#8fd7bd;font:13px system-ui">Power Shards collected: <b>${state.powerShards||0}</b></div>`;
+    const claimedShards = REGION_ORDER.filter(regionId => state.regionProgress[regionId]?.shardClaimed)
+        .map(regionId => REGION_DATA[regionId].shardName);
+    html+=`<div style="padding:8px 0;color:#8fd7bd;font:13px system-ui"><b>Power Shards: ${claimedShards.length}/${REGION_ORDER.length}</b>${claimedShards.length ? `<ul style="margin:6px 0 0 18px;padding:0;color:#cfe8d7">${claimedShards.map(name=>`<li>${name}</li>`).join('')}</ul>` : '<div style="margin-top:4px;color:#aebdb2">No Power Shards collected yet.</div>'}</div>`;
     html+=button('health','health','Vitality',`+20 maximum HP · Current ${getMaxHP()} HP`,upgradePrice('health'),state.healthUpgradeLevel||0,10);
     html+=button('mana','mana','Mana Capacity',`+20 maximum MP · Current ${getMaxMana()} MP`,upgradePrice('mana'),manaLevel,10);
     for(const id of ['arcane','heal','nova','barrier','antiMagic','deathBeam','summoner'])if(isAbilityUnlocked(id)){
@@ -3968,7 +4045,7 @@ function startNewGame() {
     });
     companions[0].active = true; companions[1].active = true;
     guardianNPC.root.setEnabled(false); guardianMarker.setEnabled(false);
-    [aureliaModel,darianModel,nyraModel,rowanModel,serenModel].forEach(model=>model.root.setEnabled(false));
+    aureliaModel.root.setEnabled(false);
     updatePrisonCrystalVisibility();
     $('weather-label').textContent = 'CLEAR'; $('weather-overlay').className = 'weather-overlay';
     currentTarget = null;
@@ -4530,9 +4607,9 @@ function openGameGuide() {
     content.innerHTML=[
         card('Your Goal','<p>Explore the connected regions, defeat each region boss, and claim the Power Shard sealed behind it. A claimed shard opens the next route. The known regions are only the beginning; the story is not finished at the Sunken Mire.</p>'),
         card('Controls','<ul><li><b>W A S D</b> — move relative to the camera</li><li><b>Mouse drag</b> — look around; wheel — zoom</li><li><b>Space</b> — basic attack</li><li><b>Left click</b> — cast your selected default ability</li><li><b>1, Q, 2–6</b> — cast unlocked abilities</li><li><b>E</b> — interact</li><li><b>F / T / H / G / V</b> — Follow / Attack / Hold / Defend / Advance</li><li><b>Tab</b> — cycle enemy target; <b>Esc</b> — pause</li></ul>'),
-        card('Your Party','<p><b>Reaphel — Knight:</b> frontline melee defender who draws enemy attention and blocks.</p><p><b>Sylva — Archer:</b> ranged damage dealer who attacks from a distance.</p><p>Choose their active status and formation at the planning table. Power Shards no longer unlock additional teammates.</p>'),
+        card('Your Party','<p><b>Reaphel — Knight:</b> frontline melee defender who draws enemy attention and blocks.</p><p><b>Sylva — Archer:</b> ranged damage dealer who attacks from a distance.</p><p><b>Aurelia — Healer:</b> rescued when the Emerald Forest is cleared; she joins the party and heals injured allies.</p><p>Choose active companions and formation at the planning table. Later regional rewards are Power Shards or abilities, not extra invented companions.</p>'),
         card('Abilities',`<ul>${unlocked.map(id=>`<li>${abilityNames[id]}</li>`).join('')}</ul><p>Locked abilities appear after claiming their region's Power Shard.</p>`),
-        card('Power Shards & Regions','<p><b>Emerald Forest:</b> Wildwood Shard. <b>Emberfall:</b> Barrier. <b>Frostveil:</b> Anti-Magic Barrier. <b>Starfall:</b> Death Beam. <b>Sunken Mire:</b> Summoner.</p><p>Defeat the required enemies, find ambushes and dungeons, defeat the boss, then claim the shard. Use the World Map to see which routes are open.</p>'),
+        card('Power Shards & Regions','<p><b>Emerald Forest:</b> Wildwood Power Shard (also rescues Aurelia separately). <b>Emberfall:</b> Barrier ability shard. <b>Frostveil:</b> Anti-Magic Barrier shard. <b>Starfall:</b> Death Beam shard. <b>Sunken Mire:</b> Summoner shard.</p><p>Defeat the boss to reveal the crystal prison. The shard is shown in the world during its rescue scene, then appears by name in your Power Shard tracker and inventory. Claiming a shard opens the next route.</p>'),
         card('Upgrades','<p>Visit Inventory & Equipment to upgrade health, mana, abilities, weapon and companions. Costs show the next purchase price and update after each purchase. Gold is earned by defeating enemies and discovering caches.</p>'),
         card('Combat Tips','<p>Enemies notice attacks and pursue the character who hit them. Ranged enemies appear from Emberfall onward. Blue barriers can block incoming attacks; hostile creatures can damage and eventually break them. Anti-Magic Barrier suppresses enemy magic while it remains active.</p>')
     ].join('');
