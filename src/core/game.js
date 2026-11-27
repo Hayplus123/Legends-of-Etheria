@@ -45,6 +45,10 @@ glowLight.diffuse = new Color3(0.86, 0.72, 0.43);
 glowLight.intensity = 0.28;
 glowLight.range = 18;
 const fireflies = [];
+// Circular world colliders are registered alongside the tree/rock meshes.
+const worldObstacles = [];
+let worldObstacleSequence = 0;
+const movementAvoidanceState = new WeakMap();
 const mat = (name, color, emissive = new Color3(0, 0, 0), alpha = 1) => {
     const material = new StandardMaterial(name, scene);
     material.diffuseColor = color;
@@ -276,6 +280,7 @@ skyDome.renderingGroupId = 0;
 scene.imageProcessingConfiguration.exposure = 1.12;
 scene.imageProcessingConfiguration.contrast = 1.12;
 function makeTree(x, z, scale = 1, variant = 0) {
+    worldObstacles.push({ id: ++worldObstacleSequence, kind: 'tree', x, z, radius: 0.54 * scale });
     const trunkHeight = (3.3 + (variant % 3) * 0.35) * scale;
     const trunk = MeshBuilder.CreateCylinder('ancient forest trunk', { height: trunkHeight, diameterTop: 0.34 * scale, diameterBottom: 0.9 * scale, tessellation: 12 }, scene);
     trunk.position.set(x, trunkHeight * 0.5, z);
@@ -323,6 +328,7 @@ function makeTree(x, z, scale = 1, variant = 0) {
     }
 }
 function makeRock(x, z, size) {
+    worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x, z, radius: Math.max(0.32, size * 0.82) });
     const rock = MeshBuilder.CreatePolyhedron('forest boulder', { type: 1, size }, scene);
     rock.position.set(x, size * 0.38, z);
     rock.scaling.y = 0.68;
@@ -612,9 +618,17 @@ function setCharacterRole(model, role) {
     model.pauldrons.forEach(part => part.material = pixel);
     model.boots.forEach(part => part.material = pixel);
 }
+function getCharacterAttackDuration(model) {
+    const role = String(model?.role || 'warrior').toLowerCase();
+    if (role === 'ranger' || role === 'archer') return 540;
+    if (role === 'mage' || role === 'healer' || role === 'summoner') return 650;
+    return 470;
+}
+
 function animateCharacterAttack(model) {
-    if (!model || !model.activeWeaponRoot || !model.root) return;
-    if (model._attackRaf) cancelAnimationFrame(model._attackRaf);
+    if (!model || !model.activeWeaponRoot || !model.root) return Promise.resolve(false);
+    // An animation is never cut in half by a second command. Callers check this lock before spending mana.
+    if (model._attackRaf) return Promise.resolve(false);
 
     const role = String(model.role || 'warrior').toLowerCase();
     const pivot = model.activeWeaponRoot;
@@ -622,56 +636,59 @@ function animateCharacterAttack(model) {
     const baseRootRotation = model.root.rotation.clone();
     const armBases = (model.arms || []).map(arm => arm.rotation.clone());
     const startedAt = performance.now();
-    const duration = role === 'ranger' || role === 'archer' ? 540 :
-        role === 'mage' || role === 'healer' ? 650 : 470;
+    const duration = getCharacterAttackDuration(model);
 
-    const frame = now => {
-        const p = Math.min(1, (now - startedAt) / duration);
-        const pulse = Math.sin(Math.PI * p);
-        const arm0 = model.arms && model.arms[0];
-        const arm1 = model.arms && model.arms[1];
-
-        if (role === 'ranger' || role === 'archer') {
-            // Draw the bow, hold the string, then release. The arrow is launched by the attack logic.
-            const draw = p < 0.48 ? Math.sin((p / 0.48) * Math.PI / 2) :
-                p < 0.62 ? 1 - (p - 0.48) / 0.14 : 0;
-            pivot.rotation.x = baseRotation.x - draw * 0.28;
-            pivot.rotation.z = baseRotation.z + draw * 0.42;
-            if (arm0) arm0.rotation.x = armBases[0].x - draw * 0.82;
-            if (arm1) arm1.rotation.x = armBases[1].x + draw * 0.28;
-        } else if (role === 'mage' || role === 'healer') {
-            // Wand/staff traces a smooth circle in the air before the spell is released.
-            const circle = p * Math.PI * 2;
-            pivot.rotation.x = baseRotation.x + Math.cos(circle) * 0.34;
-            pivot.rotation.z = baseRotation.z + Math.sin(circle) * 0.48;
-            if (arm0) {
-                arm0.rotation.x = armBases[0].x - Math.sin(circle) * 0.34;
-                arm0.rotation.z = armBases[0].z + Math.cos(circle) * 0.18;
-            }
-            model.root.rotation.x = -pulse * 0.035;
-        } else {
-            // Knight and warrior: pull the blade back, then tilt and sweep it across the target.
-            const windup = p < 0.28 ? p / 0.28 : 0;
-            const slash = p >= 0.28 && p <= 0.78 ? Math.sin(((p - 0.28) / 0.50) * Math.PI) : 0;
-            pivot.rotation.x = baseRotation.x - windup * 0.58 - slash * 1.12;
-            pivot.rotation.z = baseRotation.z - windup * 0.36 + slash * 1.22;
-            if (arm0) {
-                arm0.rotation.x = armBases[0].x - windup * 0.28 - slash * 0.72;
-                arm0.rotation.z = armBases[0].z - windup * 0.18 + slash * 0.48;
-            }
-            model.root.rotation.x = -slash * 0.075;
-        }
-
-        if (p < 1) {
-            model._attackRaf = requestAnimationFrame(frame);
-        } else {
+    return new Promise(resolve => {
+        model._attackRaf = -1;
+        const finish = completed => {
             pivot.rotation.copyFrom(baseRotation);
             model.root.rotation.copyFrom(baseRootRotation);
             (model.arms || []).forEach((arm, i) => arm.rotation.copyFrom(armBases[i]));
             model._attackRaf = 0;
-        }
-    };
-    model._attackRaf = requestAnimationFrame(frame);
+            resolve(completed);
+        };
+        const frame = now => {
+            const p = Math.min(1, (now - startedAt) / duration);
+            const pulse = Math.sin(Math.PI * p);
+            const arm0 = model.arms && model.arms[0];
+            const arm1 = model.arms && model.arms[1];
+
+            if (role === 'ranger' || role === 'archer') {
+                // Draw, hold, then release. The projectile is only created after this animation completes.
+                const draw = p < 0.48 ? Math.sin((p / 0.48) * Math.PI / 2) :
+                    p < 0.62 ? 1 - (p - 0.48) / 0.14 : 0;
+                pivot.rotation.x = baseRotation.x - draw * 0.28;
+                pivot.rotation.z = baseRotation.z + draw * 0.42;
+                if (arm0) arm0.rotation.x = armBases[0].x - draw * 0.82;
+                if (arm1) arm1.rotation.x = armBases[1].x + draw * 0.28;
+            } else if (role === 'mage' || role === 'healer' || role === 'summoner') {
+                // The staff traces a rune before the spell itself is released.
+                const circle = p * Math.PI * 2;
+                pivot.rotation.x = baseRotation.x + Math.cos(circle) * 0.34;
+                pivot.rotation.z = baseRotation.z + Math.sin(circle) * 0.48;
+                if (arm0) {
+                    arm0.rotation.x = armBases[0].x - Math.sin(circle) * 0.34;
+                    arm0.rotation.z = armBases[0].z + Math.cos(circle) * 0.18;
+                }
+                model.root.rotation.x = -pulse * 0.035;
+            } else {
+                // Knight/warrior: pull the weapon back, then complete the full sweep.
+                const windup = p < 0.28 ? p / 0.28 : 0;
+                const slash = p >= 0.28 && p <= 0.78 ? Math.sin(((p - 0.28) / 0.50) * Math.PI) : 0;
+                pivot.rotation.x = baseRotation.x - windup * 0.58 - slash * 1.12;
+                pivot.rotation.z = baseRotation.z - windup * 0.36 + slash * 1.22;
+                if (arm0) {
+                    arm0.rotation.x = armBases[0].x - windup * 0.28 - slash * 0.72;
+                    arm0.rotation.z = armBases[0].z - windup * 0.18 + slash * 0.48;
+                }
+                model.root.rotation.x = -slash * 0.075;
+            }
+
+            if (p < 1) model._attackRaf = requestAnimationFrame(frame);
+            else finish(true);
+        };
+        model._attackRaf = requestAnimationFrame(frame);
+    });
 }
 
 function animateCharacterGuard(model, guarding, dt = 0.16) {
@@ -944,6 +961,7 @@ const regionVisuals = {};
 const forestMeshStart = scene.meshes.length;
 const forestTransformStart = scene.transformNodes.length;
 const forestLightStart = scene.lights.length;
+const forestObstacleStart = worldObstacles.length;
 
 // Two physical areas are laid out in the same 3D world: the home base and one forest region.
 const forestGround = MeshBuilder.CreateGround('emerald forest floor', { width: 132, height: 300, subdivisions: 4 }, scene);
@@ -1103,6 +1121,7 @@ function buildAdditionalRegions() {
             const x = region.center.x + Math.cos(a) * r;
             const z = region.center.z + Math.sin(a) * r;
             if (region.id === 'emberfall') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x, z, radius: 0.92 + (i % 4) * 0.08 });
                 const basalt = MeshBuilder.CreatePolyhedron('Emberfall basalt spire', { type: 1, size: 1.25 + (i % 4) * 0.35 }, scene);
                 basalt.position.set(x, 0.9 + (i % 3) * 0.35, z);
                 basalt.scaling.set(0.9, 1.7 + (i % 3) * 0.35, 0.95);
@@ -1114,6 +1133,8 @@ function buildAdditionalRegions() {
                     lava.material = materials.emberGlow;
                 }
             } else if (region.id === 'frostveil') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'tree', x, z, radius: 1.02 });
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x: x + 1.3, z: z - 0.8, radius: 0.52 + (i % 3) * 0.06 });
                 const pine = MeshBuilder.CreateCylinder('Frostveil ice pine', { height: 4.2 + (i % 3) * 0.7, diameterTop: 0, diameterBottom: 2.0, tessellation: 6 }, scene);
                 pine.position.set(x, 2.1 + (i % 3) * 0.35, z);
                 pine.material = materials.frostCrystal;
@@ -1122,6 +1143,7 @@ function buildAdditionalRegions() {
                 ice.scaling.set(0.55, 1.65, 0.6);
                 ice.material = materials.frostCrystal;
             } else if (region.id === 'mire') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'tree', x, z, radius: 0.62 });
                 const stump = MeshBuilder.CreateCylinder('Sunken Mire ancient stump', { height: 3.6 + (i % 3) * 0.45, diameterTop: 0.45, diameterBottom: 1.1, tessellation: 8 }, scene);
                 stump.position.set(x, 1.8, z);
                 stump.rotation.z = Math.sin(a) * 0.14;
@@ -1131,6 +1153,8 @@ function buildAdditionalRegions() {
                 bogLight.material = materials.mireGlow;
                 glowLayer.addIncludedOnlyMesh(bogLight);
             } else {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x, z, radius: 0.88 + (i % 3) * 0.08 });
+                if (i % 3 === 0) worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x: x + 1.5, z: z - 1.1, radius: 0.5 });
                 const dune = MeshBuilder.CreatePolyhedron('Starfall sandstone ruin', { type: 1, size: 1.1 + (i % 3) * 0.3 }, scene);
                 dune.position.set(x, 0.8, z);
                 dune.scaling.set(1.0, 1.6, 0.8);
@@ -1149,6 +1173,7 @@ function buildAdditionalRegions() {
             const side = trailIndex % 2 ? 1 : -1;
             const trailX = region.center.x + side * (13 + (trailIndex % 4) * 4.2);
             if (region.id === 'emberfall') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x: trailX, z: trailZ, radius: 0.82 + (trailIndex % 3) * 0.08 });
                 const basalt = MeshBuilder.CreatePolyhedron('Emberfall trail basalt', { type: 1, size: 0.9 + (trailIndex % 3) * 0.25 }, scene);
                 basalt.position.set(trailX, 0.8, trailZ); basalt.scaling.set(0.9, 1.8, 0.9); basalt.material = materials.bark;
                 if (trailIndex % 2 === 0) {
@@ -1157,9 +1182,11 @@ function buildAdditionalRegions() {
                     regionHazards.push({ regionId: 'emberfall', position: new Vector3(trailX + side * 2.3,0,trailZ - 3.5), radius: 1.7, damagePerSecond: 5 });
                 }
             } else if (region.id === 'frostveil') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x: trailX, z: trailZ, radius: 0.58 + (trailIndex % 3) * 0.07 });
                 const shard = MeshBuilder.CreatePolyhedron('Frostveil trail ice spire', { type: 1, size: 0.8 + (trailIndex % 3) * 0.25 }, scene);
                 shard.position.set(trailX, 1.3, trailZ); shard.scaling.set(0.6, 2.0, 0.7); shard.material = materials.frostCrystal;
             } else if (region.id === 'starfall') {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'rock', x: trailX, z: trailZ, radius: 0.82 });
                 const ruin = MeshBuilder.CreateBox('Starfall trail ruin', { width: 1.2, height: 2.7 + (trailIndex % 3) * 0.55, depth: 1.0 }, scene);
                 ruin.position.set(trailX, ruin.scaling.y || 1.35, trailZ); ruin.rotation.z = side * 0.13; ruin.material = materials.paleStone;
                 if (trailIndex % 3 === 0) {
@@ -1167,6 +1194,7 @@ function buildAdditionalRegions() {
                     gem.position.set(trailX + side * 1.3, 1.4, trailZ); gem.material = materials.starCrystal; glowLayer.addIncludedOnlyMesh(gem);
                 }
             } else {
+                worldObstacles.push({ id: ++worldObstacleSequence, kind: 'tree', x: trailX, z: trailZ, radius: 0.54 });
                 const stump = MeshBuilder.CreateCylinder('Mire trail drowned stump', { height: 2.8, diameterTop: 0.38, diameterBottom: 0.9, tessellation: 8 }, scene);
                 stump.position.set(trailX, 1.4, trailZ); stump.material = materials.bark;
                 const wisp = MeshBuilder.CreateSphere('Mire trail wandering wisp', { diameter: 0.22, segments: 8 }, scene);
@@ -1263,6 +1291,11 @@ for (const light of scene.lights.slice(forestLightStart)) {
 for (const mote of fireflies) {
     mote.x += FOREST_OFFSET.x;
     mote.z += FOREST_OFFSET.z;
+}
+// Match the collision map to the same world-space shift as the forest meshes.
+for (const obstacle of worldObstacles.slice(forestObstacleStart)) {
+    obstacle.x += FOREST_OFFSET.x;
+    obstacle.z += FOREST_OFFSET.z;
 }
 regionVisuals.forest = {
     meshes: scene.meshes.slice(forestMeshStart),
@@ -2240,22 +2273,33 @@ function updatePlayerSummoner(dt) {
     }
 }
 function castSummonerSpecial() {
-    const cost=65;
-    if(state.mana<cost){showToast(`Summoner requires ${cost} MP.`);return;}
-    if(state.abilityCooldowns.summoner>0){showToast('Summoner is recharging.');return;}
-    state.mana-=cost;state.abilityCooldowns.summoner=15;animateCharacterAttack(player);
-    const colour=new Color3(0.28,1,0.66);
-    const pos=player.root.position.clone();
-        drawMagicGlyph(pos.add(new Vector3(0,0.065,0)),colour,{floor:true,size:3.25,duration:1250},()=>{
-        for(let i=0;i<4;i++){
-            const a=i*Math.PI/2+Math.PI/4;
-            const ally=spawnSummonedAlly({id:'player',root:player.root},50,'special',24);
-            ally.root.position.copyFrom(player.root.position.add(new Vector3(Math.cos(a)*2.4,0,Math.sin(a)*2.4)));
-        }
-        let hits=0;
-        for(const enemy of enemies){if(enemy.dead)continue;if(distance(enemy.root.position,player.root.position)<=9){dealDamage(enemy,88+(state.abilityLevels.summoner-1)*14,player.root);hits++;}}
-        showToast(`Ether summoning! Four allies arrive; ${hits} enemies struck by the summoning burst.`,4);
-        updateHUD();
+    const cost = 65;
+    if (player._attackRaf) { showToast('Finish your current action first.', 1.2); return; }
+    if (state.mana < cost) { showToast(`Summoner requires ${cost} MP.`); return; }
+    if (state.abilityCooldowns.summoner > 0) { showToast('Summoner is recharging.'); return; }
+    state.mana -= cost;
+    state.abilityCooldowns.summoner = 15;
+    void animateCharacterAttack(player).then(completed => {
+        if (!completed || !state.started || state.paused) return;
+        const colour = new Color3(0.28, 1, 0.66);
+        const pos = player.root.position.clone();
+        drawMagicGlyph(pos.add(new Vector3(0, 0.065, 0)), colour, { floor: true, size: 3.25, duration: 1250 }, () => {
+            for (let i = 0; i < 4; i++) {
+                const a = i * Math.PI / 2 + Math.PI / 4;
+                const ally = spawnSummonedAlly({ id: 'player', root: player.root }, 50, 'special', 24);
+                ally.root.position.copyFrom(player.root.position.add(new Vector3(Math.cos(a) * 2.4, 0, Math.sin(a) * 2.4)));
+            }
+            let hits = 0;
+            for (const enemy of enemies) {
+                if (enemy.dead) continue;
+                if (distance(enemy.root.position, player.root.position) <= 9) {
+                    dealDamage(enemy, 88 + (state.abilityLevels.summoner - 1) * 14, player.root);
+                    hits++;
+                }
+            }
+            showToast(`Ether summoning! Four allies arrive; ${hits} enemies struck by the summoning burst.`, 4);
+            updateHUD();
+        });
     });
 }
 
@@ -2397,6 +2441,17 @@ function startCompanionConversation(active) {
     return true;
 }
 
+// These saved SVGs are full character portraits; keep the 3D body rig independent.
+const ROLE_PORTRAITS = {
+    knight: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+QnJhbm4sIEd1YXJkaWFuPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBzdGFsd2FydCBndWFyZGlhbiB3ZWFyaW5nIHRlYWwgc3RlZWwgYXJtb3VyIGFuZCBjYXJyeWluZyBhIGNyeXN0YWwgc2hpZWxkLjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4M2I0MyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEwMWIyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InN0ZWVsIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM4ZGQ4ZDQiLz48c3RvcCBvZmZzZXQ9Ii41IiBzdG9wLWNvbG9yPSIjM2M3Yzg3Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjAzYjUwIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic2hpZWxkIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkOWZmZmYiLz48c3RvcCBvZmZzZXQ9Ii40NSIgc3RvcC1jb2xvcj0iIzc4ZDdlNiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzMxNWM5MSIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjgiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYmRmYmZmIiBvcGFjaXR5PSIuNiI+PGNpcmNsZSBjeD0iMjgiIGN5PSIzMCIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTMyIiBjeT0iMzgiIHI9IjEuNSIvPjxwYXRoIGQ9Im0xMjMgNjAgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIvPjwvZz4KICA8cGF0aCBkPSJNMzAgMjAwIDQxIDEyM1E0NiAxMDUgNjMgOTlMNjMgODZIOTdMOTcgOTlRMTE0IDEwNiAxMjAgMTI3TDEyOSAyMDBaIiBmaWxsPSJ1cmwoI3N0ZWVsKSIgc3Ryb2tlPSIjOWZmNGYyIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxwYXRoIGQ9Ik02MSAxMDAgODAgMTE3IDk5IDEwMCA5OSAxNTEgODAgMTc0IDYxIDE1MVoiIGZpbGw9IiMxNzMzNDQiIHN0cm9rZT0iI2I3ZmZmOSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8cGF0aCBkPSJNNTIgNDQgNjIgMjUgODAgMTcgOTkgMjUgMTA5IDQ0IDEwNCA4MCA5NCA5NUg2Nkw1NiA4MFoiIGZpbGw9IiNiNjhhNjgiLz4KICA8cGF0aCBkPSJNNDYgNTMgNDcgMzIgNjEgMTcgODAgMTMgMTAwIDE3IDExNCAzNCAxMTMgNTcgMTAwIDQxIDk0IDMxIDgwIDM5IDY1IDMxIDU5IDQzWiIgZmlsbD0idXJsKCNzdGVlbCkiIHN0cm9rZT0iI2M1ZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTU5IDU5UTY3IDU0IDc0IDU5TTg3IDU5UTk0IDU0IDEwMSA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTcyYzNiIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MiA3NlE4MCA4MSA4OCA3NiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzg0ZTQzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik01OCA5MSA4MCAxMDYgMTAyIDkxIiBmaWxsPSJub25lIiBzdHJva2U9IiNlMGZmZmIiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik00MyAxMTUgMjEgMTM3IDM1IDE1NyA1OSAxMzNNMTE3IDExNSAxMzcgMTM4IDEyNCAxNTcgMTAxIDEzMyIgZmlsbD0idXJsKCNzdGVlbCkiIHN0cm9rZT0iI2E3ZmZmOSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTE4IDExNiAzNyAxMDQgNTUgMTIxIDUyIDE1MSAzNCAxNzAgMTUgMTUxWiIgZmlsbD0idXJsKCNzaGllbGQpIiBzdHJva2U9IiNlN2ZmZmYiIHN0cm9rZS13aWR0aD0iMiIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTM0IDExMyAzNSAxNTlNMjEgMTM3IDQ4IDEzNyIgc3Ryb2tlPSIjZWZmZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIgb3BhY2l0eT0iLjkiLz4KICA8cGF0aCBkPSJNNzEgMTM5IDgwIDE0NyA4OSAxMzlNNjggMTYwIDgwIDE2OCA5MiAxNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2JkZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2QwZmZmZiI+QlJBTk48L3RleHQ+Cjwvc3ZnPgo=',
+    warrior: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+VmVzcGVyYSwgUmlmdCBDaGFtcGlvbjwvdGl0bGU+PGRlc2MgaWQ9ImRlc2MiPkEgcG93ZXJmdWwgY2hhbXBpb24gaW4gZGFyayBjcmltc29uIGFybW9yIHdpdGggYSBnbG93aW5nIHJpZnQgYmxhZGUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNDcyMDM2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTcxMDI1Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYXJtb3IiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2E2NGI3NSIvPjxzdG9wIG9mZnNldD0iLjUiIHN0b3AtY29sb3I9IiM0YTIzNDciLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyMDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNmMGMyZDkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNhNDQ5ODAiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJibGFkZSIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjZmZlNGY1Ii8+PHN0b3Agb2Zmc2V0PSIuNDUiIHN0b3AtY29sb3I9IiNmYjc1Y2UiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM3OTI5YTQiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGZpbHRlciBpZD0iZ2xvdyI+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMyIgcmVzdWx0PSJiIi8+PGZlTWVyZ2U+PGZlTWVyZ2VOb2RlIGluPSJiIi8+PGZlTWVyZ2VOb2RlIGluPSJTb3VyY2VHcmFwaGljIi8+PC9mZU1lcmdlPjwvZmlsdGVyPgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjIwMCIgcng9IjE4IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMjIgMjggMTE0IDUwIDEyOCA2NCAxMTcgNzkgMTMzIDk2IDExOSAxMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2YzOGFjYyIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuNyIvPgogIDxnIGZpbGw9IiNmZmI4ZTciIG9wYWNpdHk9Ii44Ij48cGF0aCBkPSJtMzAgMzQgNCA5IDkgNC05IDQtNCA5LTQtOS05LTQgOS00eiIvPjxjaXJjbGUgY3g9IjEyNiIgY3k9IjI0IiByPSIyIi8+PGNpcmNsZSBjeD0iMzIiIGN5PSI4MSIgcj0iMS40Ii8+PC9nPgogIDxwYXRoIGQ9Ik0yOSAyMDAgMzkgMTIyUTQ0IDEwNCA2MSA5OUw2MSA4NkgxMDBMMTAwIDk5UTExNyAxMDcgMTIxIDEyOEwxMzAgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iI2VjOGNiZCIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjAgMTAxIDgwIDExOCAxMDAgMTAxIDEwMCAxNTEgODAgMTc2IDYwIDE1MVoiIGZpbGw9IiMyNTE2MmYiIHN0cm9rZT0iI2RjNmZhOSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8cGF0aCBkPSJNNTIgNDRRNTYgMTggODAgMThRMTA0IDIwIDExMCA0NkwxMDQgODAgOTUgOTdINjRMNTQgNzhaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ4IDYwUTQwIDMwIDYyIDE4TDc4IDI1IDk3IDE2UTExNyAzMyAxMTIgNjFMMTAxIDQ1IDkzIDM0IDc4IDQzIDYzIDM3IDU5IDU4WiIgZmlsbD0iIzQ0MjAzOCIgc3Ryb2tlPSIjZDk3OWFiIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxwYXRoIGQ9Ik02MCA2MFE2NyA1NCA3NCA2ME04NyA2MFE5NCA1NCAxMDEgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzMwMTUyYyIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzIgNzdRODAgODIgODggNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg0NDI2ZCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTggOTAgODAgMTA3IDEwMiA5MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZkM2VjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDMgMTE2IDIzIDE0MyAzOSAxNTMgNjEgMTMyTTExNyAxMTYgMTM3IDE0MyAxMjEgMTUzIDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iI2U5ODNiNiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTEyOSAxMzggMTQxIDg4IDE1MCA0NyAxNTQgOTAgMTQzIDE0M1oiIGZpbGw9InVybCgjYmxhZGUpIiBzdHJva2U9IiNmZmQzZjQiIHN0cm9rZS13aWR0aD0iMS4zIiBmaWx0ZXI9InVybCgjZ2xvdykiLz4KICA8cGF0aCBkPSJNMTQwIDE0MyAxNDEgMTY0IiBzdHJva2U9IiNkMGEwY2YiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTcwIDE0MCA4MCAxNDkgOTAgMTQwTTY4IDE1OSA4MCAxNjcgOTIgMTU5IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZjliZDciIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjg1Ii8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJtMTM3IDY0IDMgNyA3IDMtNyAzLTMgNy0zLTctNy0zIDctM3oiIGZpbGw9IiNmZmYwZmIiIHN0cm9rZT0iI2ZmOGVkNSIvPjwvZz4KICA8dGV4dCB4PSI4MCIgeT0iMTkwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2VyaWYiIGZvbnQtc2l6ZT0iMTAiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjZmZkMGViIj5WRVNQRVJBPC90ZXh0Pgo8L3N2Zz4K',
+    archer: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+T3Jpb24sIFN0YXIgUmFuZ2VyPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBjYWxtIHJhbmdlciBpbiBkZWVwIGJsdWUgYXJtb3Igd2l0aCBhIGx1bWlub3VzIHN0YXIgYm93LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4MmU1MCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiMTQyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImFybW9yIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM0YzgzYjAiLz48c3RvcCBvZmZzZXQ9Ii41NSIgc3RvcC1jb2xvcj0iIzI2NDU2ZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE1Mjc0NyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhhaXIiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2YwZDdhNSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzlhNzc0YyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJvdyIgeDI9IjEiIHkyPSIwIj48c3RvcCBzdG9wLWNvbG9yPSIjNmVkOGZmIi8+PHN0b3Agb2Zmc2V0PSIuNSIgc3RvcC1jb2xvcj0iI2U4ZmZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZlZDhmZiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjUiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYzdlZWZmIj48Y2lyY2xlIGN4PSIyMSIgY3k9IjMwIiByPSIxLjYiLz48Y2lyY2xlIGN4PSIxMjYiIGN5PSIyMiIgcj0iMS43Ii8+PGNpcmNsZSBjeD0iMTMzIiBjeT0iNjYiIHI9IjEuMyIvPjxjaXJjbGUgY3g9IjMzIiBjeT0iNzQiIHI9IjEuMiIvPjxwYXRoIGQ9Im0xMjcgMzkgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIgb3BhY2l0eT0iLjg1Ii8+PC9nPgogIDxwYXRoIGQ9Ik0zNCAyMDAgNDQgMTI1UTQ4IDEwNSA2MyAxMDFMNjMgODdIOThMOTggMTAxUTExNSAxMDYgMTE4IDEyOUwxMjcgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzhhZDRlZSIgc3Ryb2tlLXdpZHRoPSIxLjQiLz4KICA8cGF0aCBkPSJNNjMgMTA1IDgwIDExOSA5NyAxMDUgOTkgMTUyIDgwIDE3NSA2MSAxNTJaIiBmaWxsPSIjMTYzMDRlIiBzdHJva2U9IiM2OGMyZTgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU0IDQ3UTU4IDIwIDgxIDIxUTEwNSAyMCAxMDkgNDdMMTA1IDgyIDk1IDk5SDY0TDU0IDc5WiIgZmlsbD0idXJsKCNoYWlyKSIvPgogIDxwYXRoIGQ9Ik00OSA1OFE0MCAyOSA2OCAxN1E5MiA5IDEwOSAzMEwxMTIgNTQgMTAxIDQ2IDg5IDM0IDcyIDQzIDU5IDQwWiIgZmlsbD0iIzU5NGIzZCIgc3Ryb2tlPSIjY2ZiMjdiIiBzdHJva2Utd2lkdGg9IjEuMyIvPgogIDxwYXRoIGQ9Ik02MCA2MVE2NyA1NiA3MyA2MU04OCA2MVE5NSA1NiAxMDEgNjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIxMzI0OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzMgNzdRODAgODEgODcgNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg3Njg0YSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTkgOTEgODAgMTA4IDEwMSA5MSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTJkNGFjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDUgMTE3IDI2IDE0NCA0MSAxNTQgNjEgMTMyTTExNSAxMTcgMTM0IDE0NCAxMjAgMTU0IDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzcyY2FlYyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI4IDEyNFEzIDg4IDI2IDYxUTMxIDkyIDQxIDExMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2JvdykiIHN0cm9rZS13aWR0aD0iNCIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTI2IDYxIDMwIDEyNSIgc3Ryb2tlPSIjZWFmZmZmIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogIDxwYXRoIGQ9Ik0yNyA5NSAzOCA4OCIgc3Ryb2tlPSIjYjhlZGZmIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNzIgMTM5IDgwIDE0NSA4OCAxMzlNNjkgMTU5IDgwIDE2NiA5MSAxNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzljZTVmZiIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuODUiLz4KICA8ZyBmaWx0ZXI9InVybCgjZ2xvdykiPjxwYXRoIGQ9Im0zMCA4MSA0IDggOSA0LTkgNC00IDktNC05LTktNCA5LTR6IiBmaWxsPSIjZjRmZmZmIiBzdHJva2U9IiM3OWRmZmYiIHN0cm9rZS13aWR0aD0iMS40Ii8+PC9nPgogIDx0ZXh0IHg9IjgwIiB5PSIxOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJzZXJpZiIgZm9udC1zaXplPSIxMCIgbGV0dGVyLXNwYWNpbmc9IjIiIGZpbGw9IiNjOGYxZmYiPk9SSU9OPC90ZXh0Pgo8L3N2Zz4K',
+    ranger: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+T3Jpb24sIFN0YXIgUmFuZ2VyPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBjYWxtIHJhbmdlciBpbiBkZWVwIGJsdWUgYXJtb3Igd2l0aCBhIGx1bWlub3VzIHN0YXIgYm93LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE4MmU1MCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiMTQyYiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImFybW9yIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiM0YzgzYjAiLz48c3RvcCBvZmZzZXQ9Ii41NSIgc3RvcC1jb2xvcj0iIzI2NDU2ZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE1Mjc0NyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhhaXIiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iI2YwZDdhNSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzlhNzc0YyIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJvdyIgeDI9IjEiIHkyPSIwIj48c3RvcCBzdG9wLWNvbG9yPSIjNmVkOGZmIi8+PHN0b3Agb2Zmc2V0PSIuNSIgc3RvcC1jb2xvcj0iI2U4ZmZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZlZDhmZiIvPjwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJnbG93Ij48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIyLjUiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjYzdlZWZmIj48Y2lyY2xlIGN4PSIyMSIgY3k9IjMwIiByPSIxLjYiLz48Y2lyY2xlIGN4PSIxMjYiIGN5PSIyMiIgcj0iMS43Ii8+PGNpcmNsZSBjeD0iMTMzIiBjeT0iNjYiIHI9IjEuMyIvPjxjaXJjbGUgY3g9IjMzIiBjeT0iNzQiIHI9IjEuMiIvPjxwYXRoIGQ9Im0xMjcgMzkgMyA3IDcgMy03IDMtMyA3LTMtNy03LTMgNy0zeiIgb3BhY2l0eT0iLjg1Ii8+PC9nPgogIDxwYXRoIGQ9Ik0zNCAyMDAgNDQgMTI1UTQ4IDEwNSA2MyAxMDFMNjMgODdIOThMOTggMTAxUTExNSAxMDYgMTE4IDEyOUwxMjcgMjAwWiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzhhZDRlZSIgc3Ryb2tlLXdpZHRoPSIxLjQiLz4KICA8cGF0aCBkPSJNNjMgMTA1IDgwIDExOSA5NyAxMDUgOTkgMTUyIDgwIDE3NSA2MSAxNTJaIiBmaWxsPSIjMTYzMDRlIiBzdHJva2U9IiM2OGMyZTgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU0IDQ3UTU4IDIwIDgxIDIxUTEwNSAyMCAxMDkgNDdMMTA1IDgyIDk1IDk5SDY0TDU0IDc5WiIgZmlsbD0idXJsKCNoYWlyKSIvPgogIDxwYXRoIGQ9Ik00OSA1OFE0MCAyOSA2OCAxN1E5MiA5IDEwOSAzMEwxMTIgNTQgMTAxIDQ2IDg5IDM0IDcyIDQzIDU5IDQwWiIgZmlsbD0iIzU5NGIzZCIgc3Ryb2tlPSIjY2ZiMjdiIiBzdHJva2Utd2lkdGg9IjEuMyIvPgogIDxwYXRoIGQ9Ik02MCA2MVE2NyA1NiA3MyA2MU04OCA2MVE5NSA1NiAxMDEgNjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIxMzI0OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzMgNzdRODAgODEgODcgNzciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzg3Njg0YSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNTkgOTEgODAgMTA4IDEwMSA5MSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTJkNGFjIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNDUgMTE3IDI2IDE0NCA0MSAxNTQgNjEgMTMyTTExNSAxMTcgMTM0IDE0NCAxMjAgMTU0IDk5IDEzMiIgZmlsbD0idXJsKCNhcm1vcikiIHN0cm9rZT0iIzcyY2FlYyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI4IDEyNFEzIDg4IDI2IDYxUTMxIDkyIDQxIDExMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2JvdykiIHN0cm9rZS13aWR0aD0iNCIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgPHBhdGggZD0iTTI2IDYxIDMwIDEyNSIgc3Ryb2tlPSIjZWFmZmZmIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogIDxwYXRoIGQ9Ik0yNyA5NSAzOCA4OCIgc3Ryb2tlPSIjYjhlZGZmIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNzIgMTM5IDgwIDE0NSA4OCAxMzlNNjkgMTU5IDgwIDE2NiA5MSAxNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzljZTVmZiIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuODUiLz4KICA8ZyBmaWx0ZXI9InVybCgjZ2xvdykiPjxwYXRoIGQ9Im0zMCA4MSA0IDggOSA0LTkgNC00IDktNC05LTktNCA5LTR6IiBmaWxsPSIjZjRmZmZmIiBzdHJva2U9IiM3OWRmZmYiIHN0cm9rZS13aWR0aD0iMS40Ii8+PC9nPgogIDx0ZXh0IHg9IjgwIiB5PSIxOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJzZXJpZiIgZm9udC1zaXplPSIxMCIgbGV0dGVyLXNwYWNpbmc9IjIiIGZpbGw9IiNjOGYxZmYiPk9SSU9OPC90ZXh0Pgo8L3N2Zz4K',
+    mage: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+Tnl4LCBWb2lkIEFyY2FuaXN0PC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBteXN0ZXJpb3VzIG1hZ2UgaW4gbWlkbmlnaHQgcm9iZXMgd2l0aCBhIHZpb2xldCB2b2lkIGNyeXN0YWwuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjMjExODNlIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGIxMDI4Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icm9iZSIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNGUzOTdmIi8+PHN0b3Agb2Zmc2V0PSIuNTIiIHN0b3AtY29sb3I9IiMyNDFmNGQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxNDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkNmM4ZmYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2YTRhYTciLz48L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJvcmIiPjxzdG9wIHN0b3AtY29sb3I9IiNmMmQ4ZmYiLz48c3RvcCBvZmZzZXQ9Ii4yNSIgc3RvcC1jb2xvcj0iI2I3NzRmZiIvPjxzdG9wIG9mZnNldD0iLjcyIiBzdG9wLWNvbG9yPSIjNmMzY2NjIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjUxMzRjIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxmaWx0ZXIgaWQ9Imdsb3ciPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjMiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8cGF0aCBkPSJNMTQgMTc0IDMzIDk0IDUzIDcyIDEwOCA3MiAxMjggOTkgMTQ4IDE3NFoiIGZpbGw9IiM2ZDUwYWMiIG9wYWNpdHk9Ii4yIi8+CiAgPGcgZmlsbD0iI2M0YTlmZiIgb3BhY2l0eT0iLjciPjxwYXRoIGQ9Im0yNSAzMSA0IDkgOSA0LTkgNC00IDktNC05LTktNCA5LTR6Ii8+PHBhdGggZD0ibTEzMCA0NiAzIDcgNyAzLTcgMy0zIDctMy03LTctMyA3LTN6Ii8+PGNpcmNsZSBjeD0iMTIzIiBjeT0iMjUiIHI9IjIiLz48Y2lyY2xlIGN4PSIzNCIgY3k9Ijc3IiByPSIxLjgiLz48L2c+CiAgPHBhdGggZD0iTTM4IDIwMCA0MyAxMjdRNDcgMTA1IDYxIDEwMUw2MSA4OEg5OUw5OSAxMDFRMTEzIDEwNiAxMTcgMTI4TDEyMiAyMDBaIiBmaWxsPSJ1cmwoI3JvYmUpIiBzdHJva2U9IiM4ZDZiZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTYxIDEwMyA4MCAxMjcgOTkgMTAzIDEwMCAxNTUgODAgMTc2IDYwIDE1NVoiIGZpbGw9IiMxNzE1MjkiIHN0cm9rZT0iI2I0OGFmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjEgODlRNDcgNzIgNTQgNDVRNjAgMjQgODAgMjNRMTA0IDI0IDEwOSA0OFExMTQgNzQgOTkgODlMOTkgMTA3IDgwIDExOSA2MSAxMDZaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ5IDY1UTQzIDM1IDY1IDIyUTkwIDkgMTEwIDMzTDExNiA2NSAxMDQgNTMgOTUgMzcgNzggNDcgNjMgNDEgNjAgNjBaIiBmaWxsPSIjMjExYTNlIiBzdHJva2U9IiM5NjczZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU5IDYyUTY1IDU3IDcyIDYyTTg4IDYyUTk2IDU2IDEwMiA2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjExNjMzIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MyA3N1E4MCA4MSA4NyA3NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTczYzg0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik02MyA5MSA4MCAxMDQgOTcgOTEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2UwY2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTQ5IDEyMSAyNiAxNDMgNDAgMTUzIDYyIDEzNk0xMTEgMTIxIDEzNCAxNDIgMTIxIDE1NCA5OSAxMzYiIGZpbGw9InVybCgjcm9iZSkiIHN0cm9rZT0iIzlhN2FkNSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI2IDE0MyAxOCAxMzIgMjMgMTE0IDMwIDEyOCAzNiAxMzdaIiBmaWxsPSIjZDRjMmZmIi8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJNMjAgMTA1IDI4IDkyIDM2IDEwNSAyOCAxMTlaIiBmaWxsPSJ1cmwoI29yYikiIHN0cm9rZT0iI2UxYzdmZiIvPjxjaXJjbGUgY3g9IjI4IiBjeT0iMTA1IiByPSIzIiBmaWxsPSIjZmZmIi8+PC9nPgogIDxwYXRoIGQ9Ik02NCAxNDIgODAgMTUxIDk2IDE0Mk02OCAxNjIgODAgMTcwIDkyIDE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTk4NWU1IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2RmY2VmZiI+TllYPC90ZXh0Pgo8L3N2Zz4K',
+    summoner: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+Tnl4LCBWb2lkIEFyY2FuaXN0PC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+QSBteXN0ZXJpb3VzIG1hZ2UgaW4gbWlkbmlnaHQgcm9iZXMgd2l0aCBhIHZpb2xldCB2b2lkIGNyeXN0YWwuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjMjExODNlIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGIxMDI4Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icm9iZSIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNGUzOTdmIi8+PHN0b3Agb2Zmc2V0PSIuNTIiIHN0b3AtY29sb3I9IiMyNDFmNGQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxNDE1MmYiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoYWlyIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNkNmM4ZmYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2YTRhYTciLz48L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJvcmIiPjxzdG9wIHN0b3AtY29sb3I9IiNmMmQ4ZmYiLz48c3RvcCBvZmZzZXQ9Ii4yNSIgc3RvcC1jb2xvcj0iI2I3NzRmZiIvPjxzdG9wIG9mZnNldD0iLjcyIiBzdG9wLWNvbG9yPSIjNmMzY2NjIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjUxMzRjIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxmaWx0ZXIgaWQ9Imdsb3ciPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjMiIHJlc3VsdD0iYiIvPjxmZU1lcmdlPjxmZU1lcmdlTm9kZSBpbj0iYiIvPjxmZU1lcmdlTm9kZSBpbj0iU291cmNlR3JhcGhpYyIvPjwvZmVNZXJnZT48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjE2MCIgaGVpZ2h0PSIyMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8cGF0aCBkPSJNMTQgMTc0IDMzIDk0IDUzIDcyIDEwOCA3MiAxMjggOTkgMTQ4IDE3NFoiIGZpbGw9IiM2ZDUwYWMiIG9wYWNpdHk9Ii4yIi8+CiAgPGcgZmlsbD0iI2M0YTlmZiIgb3BhY2l0eT0iLjciPjxwYXRoIGQ9Im0yNSAzMSA0IDkgOSA0LTkgNC00IDktNC05LTktNCA5LTR6Ii8+PHBhdGggZD0ibTEzMCA0NiAzIDcgNyAzLTcgMy0zIDctMy03LTctMyA3LTN6Ii8+PGNpcmNsZSBjeD0iMTIzIiBjeT0iMjUiIHI9IjIiLz48Y2lyY2xlIGN4PSIzNCIgY3k9Ijc3IiByPSIxLjgiLz48L2c+CiAgPHBhdGggZD0iTTM4IDIwMCA0MyAxMjdRNDcgMTA1IDYxIDEwMUw2MSA4OEg5OUw5OSAxMDFRMTEzIDEwNiAxMTcgMTI4TDEyMiAyMDBaIiBmaWxsPSJ1cmwoI3JvYmUpIiBzdHJva2U9IiM4ZDZiZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTYxIDEwMyA4MCAxMjcgOTkgMTAzIDEwMCAxNTUgODAgMTc2IDYwIDE1NVoiIGZpbGw9IiMxNzE1MjkiIHN0cm9rZT0iI2I0OGFmZiIgc3Ryb2tlLXdpZHRoPSIxLjYiLz4KICA8cGF0aCBkPSJNNjEgODlRNDcgNzIgNTQgNDVRNjAgMjQgODAgMjNRMTA0IDI0IDEwOSA0OFExMTQgNzQgOTkgODlMOTkgMTA3IDgwIDExOSA2MSAxMDZaIiBmaWxsPSJ1cmwoI2hhaXIpIi8+CiAgPHBhdGggZD0iTTQ5IDY1UTQzIDM1IDY1IDIyUTkwIDkgMTEwIDMzTDExNiA2NSAxMDQgNTMgOTUgMzcgNzggNDcgNjMgNDEgNjAgNjBaIiBmaWxsPSIjMjExYTNlIiBzdHJva2U9IiM5NjczZDIiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTU5IDYyUTY1IDU3IDcyIDYyTTg4IDYyUTk2IDU2IDEwMiA2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjExNjMzIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03MyA3N1E4MCA4MSA4NyA3NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTczYzg0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik02MyA5MSA4MCAxMDQgOTcgOTEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2UwY2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTQ5IDEyMSAyNiAxNDMgNDAgMTUzIDYyIDEzNk0xMTEgMTIxIDEzNCAxNDIgMTIxIDE1NCA5OSAxMzYiIGZpbGw9InVybCgjcm9iZSkiIHN0cm9rZT0iIzlhN2FkNSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTI2IDE0MyAxOCAxMzIgMjMgMTE0IDMwIDEyOCAzNiAxMzdaIiBmaWxsPSIjZDRjMmZmIi8+CiAgPGcgZmlsdGVyPSJ1cmwoI2dsb3cpIj48cGF0aCBkPSJNMjAgMTA1IDI4IDkyIDM2IDEwNSAyOCAxMTlaIiBmaWxsPSJ1cmwoI29yYikiIHN0cm9rZT0iI2UxYzdmZiIvPjxjaXJjbGUgY3g9IjI4IiBjeT0iMTA1IiByPSIzIiBmaWxsPSIjZmZmIi8+PC9nPgogIDxwYXRoIGQ9Ik02NCAxNDIgODAgMTUxIDk2IDE0Mk02OCAxNjIgODAgMTcwIDkyIDE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTk4NWU1IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgPHRleHQgeD0iODAiIHk9IjE5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXNpemU9IjEwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0iI2RmY2VmZiI+TllYPC90ZXh0Pgo8L3N2Zz4K',
+    healer: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMzAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+RWxvd2VuLCBzcGlyaXQgcmV2aXZlcjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgZmFudGFzeSBoZWFsZXIgd2VhcmluZyBhIGRlZXAgZm9yZXN0LWdyZWVuIGhvb2QsIHdpdGggZ2xvd2luZyB0ZWFsIGV5ZXMgYW5kIGEgY3J5c3RhbCBwZW5kYW50LjwvZGVzYz4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMTgzZDNhIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE3MTUyZCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iY2xvYWsiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMmM3NjYwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE3M2EzZCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iY3J5c3RhbCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNkOGZmZjMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIwLjUiIHN0b3AtY29sb3I9IiM3NmYyZGMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGI5YWZmIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJnbG93Ij4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjN2ZmZmUyIiBzdG9wLW9wYWNpdHk9Ii40NSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM3ZmZmZTIiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIzMDAiIHJ4PSIxOCIgZmlsbD0idXJsKCNiZykiLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSIxNDUiIHI9IjExMiIgZmlsbD0idXJsKCNnbG93KSIvPgogIDxwYXRoIGQ9Ik0zMyAzMDAgUTM1IDIyNSA3MSAyMDQgTDg4IDE4OCBMMTUxIDE4OCBMMTc0IDIwNSBRMjA4IDIyNSAyMTAgMzAwWiIgZmlsbD0idXJsKCNjbG9haykiIHN0cm9rZT0iIzc1ZDliYSIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNNjEgMTE0IFEzNyAzOSAxMjEgMTkgUTIwMSAyOCAxODEgMTE4IEwxNjkgMTk2IEw3MCAxOTZaIiBmaWxsPSIjMTUzMzMyIiBzdHJva2U9IiM2ZWM1YTgiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxwYXRoIGQ9Ik02NiAxMDUgUTc4IDUzIDEyMCA0MyBRMTU5IDUxIDE3NSAxMDUgTDE1OCAxNjkgUTE0MyAxOTAgMTIwIDE5MSBROTEgMTg3IDc4IDE2NVoiIGZpbGw9IiNkY2FlOTEiIHN0cm9rZT0iIzhjNmI2OSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTY0IDExNiBRNTYgNTUgMTE1IDI5IFExNzEgMzMgMTg0IDk3IEwxNzAgMTMwIEwxNTkgODYgUTEyNiAxMDMgODIgODYgTDc1IDEzM1oiIGZpbGw9IiMyMTRiNDMiIHN0cm9rZT0iIzc1ZDliYSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTg2IDEyNiBROTYgMTE3IDEwNiAxMjUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNkM2I0NSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMTM1IDEyNSBRMTQ1IDExNyAxNTUgMTI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMzZDNiNDUiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGVsbGlwc2UgY3g9Ijk4IiBjeT0iMTMyIiByeD0iNiIgcnk9IjQiIGZpbGw9IiM3NWZmZTIiLz4KICA8ZWxsaXBzZSBjeD0iMTQ1IiBjeT0iMTMyIiByeD0iNiIgcnk9IjQiIGZpbGw9IiM3NWZmZTIiLz4KICA8cGF0aCBkPSJNMTE1IDEzNyBMMTA5IDE1MSBMMTIxIDE1MyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYWQ3Zjc0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xMDUgMTY0IFExMjAgMTcxIDEzNiAxNjMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzgyNWI2MSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03OSAxOTMgUTEyMCAyMjIgMTYxIDE5MyBMMTc1IDIyMiBRMTQ2IDI0NSAxMjAgMjQ1IFE5NCAyNDUgNjUgMjIyWiIgZmlsbD0iIzJiNjU1NSIgc3Ryb2tlPSIjN2NlM2M0IiBzdHJva2Utb3BhY2l0eT0iLjY1IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cGF0aCBkPSJNMTIwIDIwNyBMMTM5IDIyOSBMMTIwIDI1OSBMMTAxIDIyOVoiIGZpbGw9InVybCgjY3J5c3RhbCkiIHN0cm9rZT0iI2Q4ZmZmMyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTEyMCAyMDcgTDEyMCAyNTkgTTEwMSAyMjkgTDEzOSAyMjkiIHN0cm9rZT0iI2VmZmZmYiIgc3Ryb2tlLW9wYWNpdHk9Ii44IiBzdHJva2Utd2lkdGg9IjEuNCIvPgogIDxwYXRoIGQ9Ik00NyAxODkgUTI2IDE2NCA0MyAxMzggUTUzIDE1NSA1OCAxNjcgUTYzIDE0OSA3NyAxNDIgUTc3IDE3NyA2MCAxOTBaIiBmaWxsPSIjNDk5OTc1IiBzdHJva2U9IiM4NmU1YjgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHBhdGggZD0iTTE5MyAxODkgUTIxNiAxNjMgMTk3IDEzNiBRMTg4IDE1NSAxODIgMTY4IFExNzcgMTUwIDE2NCAxNDMgUTE2NCAxNzcgMTgxIDE5MFoiIGZpbGw9IiM0OTk5NzUiIHN0cm9rZT0iIzg2ZTViOCIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8Y2lyY2xlIGN4PSI0NyIgY3k9Ijg1IiByPSI0IiBmaWxsPSIjOWNmZmUzIi8+CiAgPGNpcmNsZSBjeD0iMTk0IiBjeT0iNzciIHI9IjMiIGZpbGw9IiM5Y2ZmZTMiLz4KICA8cGF0aCBkPSJNMzYgMjMyIGw1IDkgMTAgMiAtOCA3IDIgMTAgLTkgLTUgLTkgNSAyIC0xMCAtOCAtNyAxMCAtMloiIGZpbGw9IiM5Y2ZmZTMiIG9wYWNpdHk9Ii44NSIvPgogIDxwYXRoIGQ9Ik0xOTggMjE1IGw0IDcgOCAxIC02IDYgMSA4IC03IC00IC03IDQgMSAtOCAtNiAtNiA4IC0xWiIgZmlsbD0iI2I4YjlmZiIgb3BhY2l0eT0iLjkiLz4KPC9zdmc+Cg=='
+};
+
 function updateQuestProgress() {
     const regionId = state.zone !== 'base' && REGION_DATA[state.zone] ? state.zone : 'forest';
     const region = REGION_DATA[regionId];
@@ -2440,7 +2495,27 @@ function updateHUD() {
         const member = document.createElement('div');
         member.className = 'party-member';
         const pct = Math.max(0, c.hp / c.maxHp * 100);
-        member.innerHTML = `<div class="party-avatar">${c.name.charAt(0)}</div><div><b>${c.name}</b><small>${c.role}${c.recovering ? ' · recovering' : ''}</small></div><div class="party-health"><i style="width:${pct}%"></i></div>`;
+        const avatar = document.createElement('div');
+        avatar.className = 'party-avatar';
+        avatar.style.cssText = 'width:38px;height:38px;flex:0 0 38px;overflow:hidden;padding:0;border-radius:50%;line-height:0;background:#18302b;border:1px solid rgba(204,224,202,.35);';
+        const portrait = document.createElement('img');
+        portrait.alt = `${c.role} character portrait`;
+        portrait.src = ROLE_PORTRAITS[String(c.role || '').toLowerCase()] || ROLE_PORTRAITS.knight;
+        portrait.draggable = false;
+        portrait.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;object-position:center 38%;';
+        avatar.appendChild(portrait);
+        const details = document.createElement('div');
+        const name = document.createElement('b');
+        name.textContent = c.name;
+        const role = document.createElement('small');
+        role.textContent = `${c.role}${c.recovering ? ' · recovering' : ''}`;
+        details.append(name, role);
+        const health = document.createElement('div');
+        health.className = 'party-health';
+        const healthFill = document.createElement('i');
+        healthFill.style.width = `${pct}%`;
+        health.appendChild(healthFill);
+        member.append(avatar, details, health);
         partyList.appendChild(member);
     }
     $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : state.defaultAbility === 'nova' ? 'FROST NOVA' : state.defaultAbility === 'barrier' ? 'BARRIER' : state.defaultAbility === 'antiMagic' ? 'ANTI-MAGIC BARRIER' : state.defaultAbility === 'summoner' ? 'SUMMONER' : 'DEATH BEAM'}`;
@@ -2776,7 +2851,7 @@ function defeatEnemy(enemy) {
 }
 
 function attack() {
-    if (state.paused || !state.started || state.attackCooldown > 0) return;
+    if (state.paused || !state.started || state.attackCooldown > 0 || player._attackRaf) return;
 
     const melee = playerClass === 'knight' || playerClass === 'warrior';
     const range = melee ? 3.8 : 22;
@@ -2797,36 +2872,35 @@ function attack() {
         return;
     }
 
-    state.attackCooldown = 0.5; // Hidden anti-spam delay; no visible cooldown bar.
+    const animationDuration = getCharacterAttackDuration(player);
+    state.attackCooldown = animationDuration / 1000 + 0.12; // Prevent another input from cutting off this attack.
     state.mana = Math.max(0, state.mana - cost);
     currentTarget = target;
 
-    if (playerClass === 'knight' || playerClass === 'warrior') {
-        animateCharacterAttack(player);
-        const strikeDamage = (playerClass === 'knight' ? 31 : 28) + state.weaponLevel * 5 + state.level * 2;
-        window.setTimeout(() => { if (!target.dead) dealDamage(target, strikeDamage, player.root); }, 190);
-        createSwordSlash(player);
-    } else if (playerClass === 'ranger') {
-        animateCharacterAttack(player);
-        window.setTimeout(() => {
-            if (state.started && !target.dead) {
-                spawnArrowProjectile(player.root.position.add(new Vector3(0, 1.42, 0.15)), target,
-                    23 + state.weaponLevel * 3 + state.level * 2, materials.gold, 23, player.root);
-            }
-        }, 275);
-    } else {
-        animateCharacterAttack(player);
-        const direction = target.root.position.subtract(player.root.position);
-        direction.y = 0;
-        direction.normalize();
-        const glyphPosition = player.root.position.add(direction.scale(1.05)).add(new Vector3(0, 1.45, 0));
-        drawMagicGlyph(glyphPosition, playerClass === 'healer' ? new Color3(0.34, 1, 0.56) : new Color3(0.32, 0.88, 1),
-            { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.48, duration: 530 }, () => {
-                if (!target.dead) spawnProjectile(glyphPosition.clone(), target,
-                    22 + state.weaponLevel * 3 + state.level * 2,
-                    playerClass === 'healer' ? materials.heal : materials.crystal, 19);
-            });
-    }
+    void animateCharacterAttack(player).then(completed => {
+        if (!completed || !state.started || state.paused || target.dead) return;
+        if (playerClass === 'knight' || playerClass === 'warrior') {
+            const strikeDamage = (playerClass === 'knight' ? 31 : 28) + state.weaponLevel * 5 + state.level * 2;
+            createSwordSlash(player);
+            dealDamage(target, strikeDamage, player.root);
+        } else if (playerClass === 'ranger') {
+            spawnArrowProjectile(player.root.position.add(new Vector3(0, 1.42, 0.15)), target,
+                23 + state.weaponLevel * 3 + state.level * 2, materials.gold, 23, player.root);
+        } else {
+            const direction = target.root.position.subtract(player.root.position);
+            direction.y = 0;
+            if (direction.lengthSquared() < 0.0001) direction.z = 1;
+            direction.normalize();
+            const glyphPosition = player.root.position.add(direction.scale(1.05)).add(new Vector3(0, 1.45, 0));
+            drawMagicGlyph(glyphPosition, playerClass === 'healer' ? new Color3(0.34, 1, 0.56) : new Color3(0.32, 0.88, 1),
+                { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.48, duration: 530 }, () => {
+                    if (!target.dead) spawnProjectile(glyphPosition.clone(), target,
+                        22 + state.weaponLevel * 3 + state.level * 2,
+                        playerClass === 'healer' ? materials.heal : materials.crystal, 19, player.root);
+                });
+        }
+        updateHUD();
+    });
     updateHUD();
 }
 
@@ -2893,67 +2967,131 @@ function spawnArrowProjectile(from, target, damage, color = materials.gold, spee
 function castAbility(id) {
     if (!state.started || state.paused) return;
     if (!isAbilityUnlocked(id)) { showToast('Defeat the region boss and claim its Power Shard to unlock this ability.'); return; }
-    if (state.abilityCooldowns[id] > 0) { showToast('That ability is still recharging.',1.2); return; }
+    if (state.abilityCooldowns[id] > 0) { showToast('That ability is still recharging.', 1.2); return; }
     if (id === 'barrier' || id === 'antiMagic') { createProtectionField(id === 'antiMagic'); return; }
     if (id === 'summoner') { castSummonerSpecial(); return; }
+    if (player._attackRaf) { showToast('Finish your current action first.', 1.2); return; }
+
     if (id === 'deathBeam') {
-        const cost=70;if(state.mana<cost){showToast(`Death Beam requires ${cost} MP.`);return;}
-        state.mana-=cost;state.abilityCooldowns.deathBeam=18;animateCharacterAttack(player);
-        const forward=camera.getDirection(new Vector3(0,0,1));forward.y=0;forward.normalize();
-        const back=player.root.position.subtract(forward.scale(2.2));
-        const yaw=Math.atan2(forward.x,forward.z);
-        drawMagicGlyph(back.add(new Vector3(0,0.065,0)),new Color3(1,0.12,0.12),{floor:true,size:2.0,duration:1050},()=>{
-            const length=27;
-            const beamMat=new StandardMaterial('death beam red light',scene);beamMat.diffuseColor=new Color3(1,0.04,0.03);beamMat.emissiveColor=new Color3(0.9,0.015,0.015);beamMat.alpha=0.72;beamMat.backFaceCulling=false;
-            const beam=MeshBuilder.CreateCylinder('wide red death beam',{height:1,diameter:2.3,tessellation:24},scene);
-            beam.position.copyFrom(player.root.position.add(forward.scale(length*0.5)).add(new Vector3(0,1.45,0)));
-            beam.rotation.set(Math.PI/2,yaw,0);beam.scaling.set(3.2,length,3.2);beam.material=beamMat;beam.isPickable=false;
-            const level=state.abilityLevels.deathBeam||1;
-            let hits=0;
-            for(const enemy of enemies){if(enemy.dead)continue;const rel=enemy.root.position.subtract(player.root.position);rel.y=0;const along=Vector3.Dot(rel,forward);if(along>0&&along<length){const closest=player.root.position.add(forward.scale(along));if(distance(enemy.root.position,closest)<4.7){dealDamage(enemy,135+level*22,player.root);hits++;}}}
-            const start=performance.now();const fade=now=>{const t=Math.min(1,(now-start)/1050);beamMat.alpha=0.72*(1-t);if(t<1)requestAnimationFrame(fade);else{beam.dispose();beamMat.dispose();}};requestAnimationFrame(fade);
-            showToast(`Death Beam tears through the path! ${hits} enemies struck.`,3.5);
-        });
-        updateHUD();return;
-    }
-    const costs={arcane:12,heal:18,nova:24};
-    if(!(id in costs))return;
-    const level=state.abilityLevels[id]||1;
-    let target=null;
-    if(id==='arcane'||id==='nova'){
-        target=currentTarget&&!currentTarget.dead&&distance(player.root.position,currentTarget.root.position)<=20?currentTarget:nearestEnemy(20);
-        if(!target){showToast(id==='arcane'?'No target is close enough for Arcane Bolt.':'No target is close enough for Frost Nova.',1.4);return;}
-    }
-    if(state.mana<costs[id]){showToast('Not enough mana. Wait for it to recover.',1.5);return;}
-    state.mana-=costs[id];animateCharacterAttack(player);
-    if(id==='arcane'){
-        state.abilityCooldowns.arcane=1.3;
-        const direction=target.root.position.subtract(player.root.position);direction.y=0;direction.normalize();
-        const glyphPosition=player.root.position.add(direction.scale(1.28)).add(new Vector3(0,1.52,0));
-        drawMagicGlyph(glyphPosition,new Color3(0.28,0.9,1),{floor:false,yaw:Math.atan2(direction.x,direction.z),size:0.66,duration:790},()=>{
-            if(!target.dead)spawnProjectile(glyphPosition.clone(),target,48*level+state.level*4+state.weaponLevel*2,materials.crystal,20,player.root);
-        });
-        showToast('Arcane Bolt!');
-    }else if(id==='heal'){
-        state.abilityCooldowns.heal=8;
-        const heal=36+(level-1)*8;
-        state.hp=Math.min(getMaxHP(),state.hp+heal);playHealingEffect(player.root);
-        for(const c of activeCompanions()){c.hp=Math.min(c.maxHp,c.hp+heal);playHealingEffect(c.model.root);}
-        showToast('Healing Wave restores health to your party.');
-    }else{
-        state.abilityCooldowns.nova=12;target.telegraphTimer=1.4;
-        const freezePosition=target.root.position.clone();
-        const frostGlyphRadius=getTargetVisualRadius(target)*FROST_GLYPH_TARGET_RADIUS_MULTIPLIER;
-        drawMagicGlyph(freezePosition.add(new Vector3(0,0.055,0)),new Color3(0.36,0.88,1),{floor:true,size:frostGlyphRadius/MAGIC_GLYPH_SIZE_MULTIPLIER,duration:730},()=>{
-            if(target.dead)return;
-            createRisingMagicBeam(target.root.position,new Color3(0.36,0.88,1),2.65,0.88,620,()=>{
-                if(!target.dead){freezeEnemy(target,2.8+(level-1)*0.25);dealDamage(target,62*level+state.level*4,player.root);}
+        const cost = 70;
+        if (state.mana < cost) { showToast(`Death Beam requires ${cost} MP.`); return; }
+        state.mana -= cost;
+        state.abilityCooldowns.deathBeam = 18;
+        void animateCharacterAttack(player).then(completed => {
+            if (!completed || !state.started || state.paused) return;
+            const forward = camera.getDirection(new Vector3(0, 0, 1));
+            forward.y = 0;
+            if (forward.lengthSquared() < 0.0001) forward.z = 1;
+            forward.normalize();
+            const back = player.root.position.subtract(forward.scale(2.2));
+            const yaw = Math.atan2(forward.x, forward.z);
+            drawMagicGlyph(back.add(new Vector3(0, 0.065, 0)), new Color3(1, 0.12, 0.12), { floor: true, size: 2.0, duration: 1050 }, () => {
+                const length = 27;
+                const beamMat = new StandardMaterial('death beam red light', scene);
+                beamMat.diffuseColor = new Color3(1, 0.04, 0.03);
+                beamMat.emissiveColor = new Color3(0.9, 0.015, 0.015);
+                beamMat.alpha = 0.72;
+                beamMat.backFaceCulling = false;
+                const beam = MeshBuilder.CreateCylinder('wide red death beam', { height: 1, diameter: 2.3, tessellation: 24 }, scene);
+                beam.position.copyFrom(player.root.position.add(forward.scale(length * 0.5)).add(new Vector3(0, 1.45, 0)));
+                beam.rotation.set(Math.PI / 2, yaw, 0);
+                beam.scaling.set(3.2, length, 3.2);
+                beam.material = beamMat;
+                beam.isPickable = false;
+                const level = state.abilityLevels.deathBeam || 1;
+                let hits = 0;
+                for (const enemy of enemies) {
+                    if (enemy.dead) continue;
+                    const rel = enemy.root.position.subtract(player.root.position);
+                    rel.y = 0;
+                    const along = Vector3.Dot(rel, forward);
+                    if (along > 0 && along < length) {
+                        const closest = player.root.position.add(forward.scale(along));
+                        if (distance(enemy.root.position, closest) < 4.7) {
+                            dealDamage(enemy, 135 + level * 22, player.root);
+                            hits++;
+                        }
+                    }
+                }
+                const start = performance.now();
+                const fade = now => {
+                    const t = Math.min(1, (now - start) / 1050);
+                    beamMat.alpha = 0.72 * (1 - t);
+                    if (t < 1) requestAnimationFrame(fade);
+                    else { beam.dispose(); beamMat.dispose(); }
+                };
+                requestAnimationFrame(fade);
+                showToast(`Death Beam tears through the path! ${hits} enemies struck.`, 3.5);
             });
         });
-        showToast('Frost Nova freezes the targeted enemy!');
+        updateHUD();
+        return;
     }
+
+    const costs = { arcane: 12, heal: 18, nova: 24 };
+    if (!(id in costs)) return;
+    const level = state.abilityLevels[id] || 1;
+    let target = null;
+    if (id === 'arcane' || id === 'nova') {
+        target = currentTarget && !currentTarget.dead && distance(player.root.position, currentTarget.root.position) <= 20
+            ? currentTarget : nearestEnemy(20);
+        if (!target) {
+            showToast(id === 'arcane' ? 'No target is close enough for Arcane Bolt.' : 'No target is close enough for Frost Nova.', 1.4);
+            return;
+        }
+    }
+    if (state.mana < costs[id]) { showToast('Not enough mana. Wait for it to recover.', 1.5); return; }
+    state.mana -= costs[id];
+    if (id === 'arcane') state.abilityCooldowns.arcane = 1.3;
+    else if (id === 'heal') state.abilityCooldowns.heal = 8;
+    else state.abilityCooldowns.nova = 12;
+
+    void animateCharacterAttack(player).then(completed => {
+        if (!completed || !state.started || state.paused) return;
+        if (id === 'arcane') {
+            if (target.dead) return;
+            const direction = target.root.position.subtract(player.root.position);
+            direction.y = 0;
+            if (direction.lengthSquared() < 0.0001) direction.z = 1;
+            direction.normalize();
+            const glyphPosition = player.root.position.add(direction.scale(1.28)).add(new Vector3(0, 1.52, 0));
+            drawMagicGlyph(glyphPosition, new Color3(0.28, 0.9, 1),
+                { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.66, duration: 790 }, () => {
+                    if (!target.dead) spawnProjectile(glyphPosition.clone(), target,
+                        48 * level + state.level * 4 + state.weaponLevel * 2, materials.crystal, 20, player.root);
+                });
+            showToast('Arcane Bolt!');
+        } else if (id === 'heal') {
+            const heal = 36 + (level - 1) * 8;
+            state.hp = Math.min(getMaxHP(), state.hp + heal);
+            playHealingEffect(player.root);
+            for (const c of activeCompanions()) {
+                c.hp = Math.min(c.maxHp, c.hp + heal);
+                playHealingEffect(c.model.root);
+            }
+            showToast('Healing Wave restores health to your party.');
+            updateHUD();
+        } else {
+            if (target.dead) return;
+            target.telegraphTimer = 1.4;
+            const freezePosition = target.root.position.clone();
+            const frostGlyphRadius = getTargetVisualRadius(target) * FROST_GLYPH_TARGET_RADIUS_MULTIPLIER;
+            drawMagicGlyph(freezePosition.add(new Vector3(0, 0.055, 0)), new Color3(0.36, 0.88, 1),
+                { floor: true, size: frostGlyphRadius / MAGIC_GLYPH_SIZE_MULTIPLIER, duration: 730 }, () => {
+                    if (target.dead) return;
+                    createRisingMagicBeam(target.root.position, new Color3(0.36, 0.88, 1), 2.65, 0.88, 620, () => {
+                        if (!target.dead) {
+                            freezeEnemy(target, 2.8 + (level - 1) * 0.25);
+                            dealDamage(target, 62 * level + state.level * 4, player.root);
+                        }
+                    });
+                });
+            showToast('Frost Nova freezes the targeted enemy!');
+        }
+    });
     updateHUD();
 }
+
 
 
 function burstEffect(position, material, size) {
@@ -2974,38 +3112,37 @@ function burstEffect(position, material, size) {
     animate();
 }
 function companionAttack(companion, enemy) {
-    if (!companion || !enemy || enemy.dead) return;
+    if (!companion || !enemy || enemy.dead || companion.model._attackRaf) return;
     const model = companion.model;
     const role = String(model.role || companion.role || '').toLowerCase();
-    animateCharacterAttack(model);
-
-    if (companion.role === 'Knight' || role === 'knight' || role === 'warrior') {
-        if (distance(model.root.position, enemy.root.position) <= 3.0) {
-            const strikeDamage = 19 + state.level * 2 + (companion.upgradeLevel || 0) * 4;
-            window.setTimeout(() => { if (!enemy.dead) dealDamage(enemy, strikeDamage, model.root); }, 190);
-            createSwordSlash(model);
-        }
-    } else if (role === 'ranger' || role === 'archer' || companion.role === 'Archer') {
-        window.setTimeout(() => {
-            if (!enemy.dead && model.root.isEnabled()) {
-                spawnArrowProjectile(model.root.position.add(new Vector3(0, 1.42, 0.15)), enemy,
-                    22 + state.level * 2 + (companion.upgradeLevel || 0) * 4, materials.gold, 21, model.root);
+    void animateCharacterAttack(model).then(completed => {
+        if (!completed || enemy.dead || !model.root.isEnabled()) return;
+        if (companion.role === 'Knight' || role === 'knight' || role === 'warrior') {
+            if (distance(model.root.position, enemy.root.position) <= 3.4) {
+                const strikeDamage = 19 + state.level * 2 + (companion.upgradeLevel || 0) * 4;
+                createSwordSlash(model);
+                dealDamage(enemy, strikeDamage, model.root);
             }
-        }, 275);
-    } else {
-        const direction = enemy.root.position.subtract(model.root.position);
-        direction.y = 0;
-        direction.normalize();
-        const glyphPosition = model.root.position.add(direction.scale(0.95)).add(new Vector3(0, 1.42, 0));
-        drawMagicGlyph(glyphPosition, role === 'healer' || companion.role === 'Healer'
-            ? new Color3(0.34, 1, 0.56) : new Color3(0.3, 0.86, 1),
-            { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.43, duration: 500 }, () => {
-                if (!enemy.dead) spawnProjectile(glyphPosition.clone(), enemy,
-                    companion.role === 'Healer' ? 13 + (companion.upgradeLevel || 0) * 3 : 21 + state.level * 2 + (companion.upgradeLevel || 0) * 4,
-                    companion.role === 'Healer' ? materials.heal : materials.crystal, 17, model.root);
-            });
-    }
+        } else if (role === 'ranger' || role === 'archer' || companion.role === 'Archer') {
+            spawnArrowProjectile(model.root.position.add(new Vector3(0, 1.42, 0.15)), enemy,
+                22 + state.level * 2 + (companion.upgradeLevel || 0) * 4, materials.gold, 21, model.root);
+        } else {
+            const direction = enemy.root.position.subtract(model.root.position);
+            direction.y = 0;
+            if (direction.lengthSquared() < 0.0001) direction.z = 1;
+            direction.normalize();
+            const glyphPosition = model.root.position.add(direction.scale(0.95)).add(new Vector3(0, 1.42, 0));
+            drawMagicGlyph(glyphPosition, role === 'healer' || companion.role === 'Healer'
+                ? new Color3(0.34, 1, 0.56) : new Color3(0.3, 0.86, 1),
+                { floor: false, yaw: Math.atan2(direction.x, direction.z), size: 0.43, duration: 500 }, () => {
+                    if (!enemy.dead) spawnProjectile(glyphPosition.clone(), enemy,
+                        companion.role === 'Healer' ? 13 + (companion.upgradeLevel || 0) * 3 : 21 + state.level * 2 + (companion.upgradeLevel || 0) * 4,
+                        companion.role === 'Healer' ? materials.heal : materials.crystal, 17, model.root);
+                });
+        }
+    });
 }
+
 function issueCommand(command) {
     state.command = command;
     for (const companion of companions) companion.command = null;
@@ -3078,51 +3215,65 @@ function useCompanionAbility() {
         showToast('That companion is not currently active.');
         return;
     }
-    const now = performance.now();
     if (c.specialCooldown > 0) {
         showToast(`${c.name}'s special ability recharges in ${Math.ceil(c.specialCooldown)} seconds.`);
         return;
     }
-    animateCharacterAttack(c.model);
-    if (c.role === 'Healer') {
-        const candidates = [{ hp: state.hp, maxHp: getMaxHP(), root: player.root, player: true }, ...companions.filter(x => x.recruited && !x.recovering).map(x => ({ hp: x.hp, maxHp: x.maxHp, root: x.model.root, companion: x }))];
-        candidates.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
-        const target = candidates[0];
-        if (target.player) state.hp = Math.min(target.maxHp, state.hp + 42);
-        else target.companion.hp = Math.min(target.maxHp, target.companion.hp + 42);
-        playHealingEffect(target.root);
-        showToast(`${c.name} casts Healing Light on ${target.player ? playerName : target.companion.name}.`);
-        c.specialCooldown = 15;
-    } else if (c.role === 'Archer') {
-        const target = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(22);
-        if (!target) { showToast(`${c.name} has no target in range.`); return; }
-        spawnArrowProjectile(c.model.root.position.add(new Vector3(0, 1.5, 0)), target, 48 + state.level * 3, materials.gold, 20, c.model.root);
-        showToast(`${c.name} fires a Piercing Shot.`);
-        c.specialCooldown = 15;
-    } else if (c.role === 'Summoner') {
-        const amount = 4; // Special call brings four additional spirits; passive summons retain their own five-ally cap.
-        for (let i = 0; i < amount; i++) spawnSummonedAlly(c, 65);
-        const center = player.root.position.clone();
-        let hits = 0;
-        for (const enemy of enemies) {
-            if (!enemy.dead && distance(enemy.root.position, center) <= 9) {
-                dealDamage(enemy, 52 + state.level * 5, c.model.root);
-                hits++;
-            }
-        }
-        burstEffect(center, materials.mireGlow, 6.5);
-        showToast(`${c.name} summons ${amount} spirits and releases a mire burst (${hits} enemies hit).`, 4);
-        c.specialCooldown = 15;
-    } else {
-        state.protectionTimer = Math.max(state.protectionTimer, 7);
-        c.command = 'defend';
-        burstEffect(player.root.position, materials.gold, 2.2);
-        showToast(`${c.name} raises a Guardian Ward. Incoming damage is reduced briefly.`);
-        c.specialCooldown = 15;
+    if (c.model._attackRaf) {
+        showToast(`${c.name} is finishing the current action.`, 1.2);
+        return;
     }
+    let rangedTarget = null;
+    if (c.role === 'Archer') {
+        rangedTarget = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(22);
+        if (!rangedTarget) { showToast(`${c.name} has no target in range.`); return; }
+    }
+
     $('command-overlay').classList.add('hidden');
-    updateHUD();
+    void animateCharacterAttack(c.model).then(completed => {
+        if (!completed || !c.active || !c.recruited || c.recovering || state.paused) return;
+        if (c.role === 'Healer') {
+            const candidates = [{ hp: state.hp, maxHp: getMaxHP(), root: player.root, player: true },
+                ...companions.filter(x => x.recruited && !x.recovering).map(x => ({ hp: x.hp, maxHp: x.maxHp, root: x.model.root, companion: x }))];
+            candidates.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+            const target = candidates[0];
+            if (target.player) state.hp = Math.min(target.maxHp, state.hp + 42);
+            else target.companion.hp = Math.min(target.maxHp, target.companion.hp + 42);
+            playHealingEffect(target.root);
+            showToast(`${c.name} casts Healing Light on ${target.player ? playerName : target.companion.name}.`);
+            c.specialCooldown = 15;
+        } else if (c.role === 'Archer') {
+            if (!rangedTarget.dead) {
+                spawnArrowProjectile(c.model.root.position.add(new Vector3(0, 1.5, 0)), rangedTarget,
+                    48 + state.level * 3, materials.gold, 20, c.model.root);
+                showToast(`${c.name} fires a Piercing Shot.`);
+                c.specialCooldown = 15;
+            }
+        } else if (c.role === 'Summoner') {
+            const amount = 4;
+            for (let i = 0; i < amount; i++) spawnSummonedAlly(c, 65);
+            const center = player.root.position.clone();
+            let hits = 0;
+            for (const enemy of enemies) {
+                if (!enemy.dead && distance(enemy.root.position, center) <= 9) {
+                    dealDamage(enemy, 52 + state.level * 5, c.model.root);
+                    hits++;
+                }
+            }
+            burstEffect(center, materials.mireGlow, 6.5);
+            showToast(`${c.name} summons ${amount} spirits and releases a mire burst (${hits} enemies hit).`, 4);
+            c.specialCooldown = 15;
+        } else {
+            state.protectionTimer = Math.max(state.protectionTimer, 7);
+            c.command = 'defend';
+            burstEffect(player.root.position, materials.gold, 2.2);
+            showToast(`${c.name} raises a Guardian Ward. Incoming damage is reduced briefly.`);
+            c.specialCooldown = 15;
+        }
+        updateHUD();
+    });
 }
+
 
 
 function formationOffset(index) {
@@ -3148,14 +3299,207 @@ function formationOffset(index) {
     const rowSpacing = state.formation === 'defensive' ? 2.0 : 1.8;
     return new Vector3(x, 0, baseZ + row * rowSpacing);
 }
+function isWorldPositionBlocked(x, z, actorRadius = 0.46) {
+    for (const obstacle of worldObstacles) {
+        const dx = x - obstacle.x;
+        const dz = z - obstacle.z;
+        const safeRadius = obstacle.radius + actorRadius + 0.08;
+        if (dx * dx + dz * dz < safeRadius * safeRadius) return true;
+    }
+    return false;
+}
+
+function resolveWorldObstacleOverlaps(root, actorRadius = 0.46) {
+    if (!root || root.isDisposed?.()) return;
+    for (let pass = 0; pass < 3; pass++) {
+        let changed = false;
+        for (const obstacle of worldObstacles) {
+            let dx = root.position.x - obstacle.x;
+            let dz = root.position.z - obstacle.z;
+            const distanceSquared = dx * dx + dz * dz;
+            const safeRadius = obstacle.radius + actorRadius + 0.08;
+            if (distanceSquared >= safeRadius * safeRadius) continue;
+            let distance = Math.sqrt(distanceSquared);
+            if (distance < 0.0001) {
+                const angle = ((obstacle.id * 37) % 360) * Math.PI / 180;
+                dx = Math.cos(angle);
+                dz = Math.sin(angle);
+                distance = 1;
+            }
+            const push = safeRadius - distance;
+            root.position.x += dx / distance * push;
+            root.position.z += dz / distance * push;
+            changed = true;
+        }
+        if (!changed) break;
+    }
+}
+
+function getObstacleAvoidanceDirection(root, desiredDirection, lookAhead = 3.0, actorRadius = 0.46) {
+    const direction = desiredDirection.clone();
+    direction.y = 0;
+    if (direction.lengthSquared() < 0.000001) return Vector3.Zero();
+    direction.normalize();
+
+    let blocker = null;
+    let blockerAlong = Infinity;
+    for (const obstacle of worldObstacles) {
+        const rx = obstacle.x - root.position.x;
+        const rz = obstacle.z - root.position.z;
+        const along = rx * direction.x + rz * direction.z;
+        const safeRadius = obstacle.radius + actorRadius + 0.34;
+        if (along < -safeRadius * 0.25 || along > lookAhead + safeRadius) continue;
+        const lateralSquared = Math.max(0, rx * rx + rz * rz - along * along);
+        if (lateralSquared < safeRadius * safeRadius && along < blockerAlong) {
+            blocker = obstacle;
+            blockerAlong = along;
+        }
+    }
+
+    if (!blocker) {
+        movementAvoidanceState.delete(root);
+        return direction;
+    }
+
+    let avoidance = movementAvoidanceState.get(root);
+    if (!avoidance || avoidance.obstacleId !== blocker.id) {
+        const radialX = root.position.x - blocker.x;
+        const radialZ = root.position.z - blocker.z;
+        const radialLength = Math.hypot(radialX, radialZ) || 1;
+        const tangentA = new Vector3(-radialZ / radialLength, 0, radialX / radialLength);
+        const tangentB = tangentA.scale(-1);
+        const destination = root.position.add(direction.scale(lookAhead));
+        const scoreSide = tangent => {
+            const testDirection = direction.scale(0.34).add(tangent.scale(0.94)).normalize();
+            const sampleX = root.position.x + testDirection.x * Math.min(lookAhead, 2.6);
+            const sampleZ = root.position.z + testDirection.z * Math.min(lookAhead, 2.6);
+            let clearance = 3.5;
+            for (const other of worldObstacles) {
+                if (other.id === blocker.id) continue;
+                const gap = Math.hypot(sampleX - other.x, sampleZ - other.z) - other.radius - actorRadius;
+                clearance = Math.min(clearance, gap);
+            }
+            return -Math.hypot(sampleX - destination.x, sampleZ - destination.z) + Math.min(clearance, 3.5) * 0.18;
+        };
+        const scoreA = scoreSide(tangentA);
+        const scoreB = scoreSide(tangentB);
+        const side = Math.abs(scoreA - scoreB) < 0.015
+            ? (String(root.name || '').length % 2 === 0 ? 1 : -1)
+            : scoreA > scoreB ? 1 : -1;
+        avoidance = { obstacleId: blocker.id, side };
+        movementAvoidanceState.set(root, avoidance);
+    }
+
+    let radial = new Vector3(root.position.x - blocker.x, 0, root.position.z - blocker.z);
+    if (radial.lengthSquared() < 0.0001) radial = direction.scale(-1);
+    radial.normalize();
+    const tangent = avoidance.side > 0
+        ? new Vector3(-radial.z, 0, radial.x)
+        : new Vector3(radial.z, 0, -radial.x);
+    const steer = direction.scale(0.34).add(tangent.scale(0.94));
+    if (steer.lengthSquared() > 0.0001) steer.normalize();
+    return steer;
+}
+
+function moveWithWorldAvoidance(root, desiredDirection, distanceToMove, actorRadius = 0.46) {
+    if (!root || root.isDisposed?.() || distanceToMove <= 0.0001) return Vector3.Zero();
+    const direction = desiredDirection.clone();
+    direction.y = 0;
+    if (direction.lengthSquared() < 0.000001) return Vector3.Zero();
+    direction.normalize();
+
+    const start = root.position.clone();
+    resolveWorldObstacleOverlaps(root, actorRadius);
+    const stepCount = Math.max(1, Math.min(12, Math.ceil(distanceToMove / 0.16)));
+    const stepDistance = distanceToMove / stepCount;
+
+    for (let step = 0; step < stepCount; step++) {
+        const steer = getObstacleAvoidanceDirection(root, direction, 2.7, actorRadius);
+        const nextX = root.position.x + steer.x * stepDistance;
+        const nextZ = root.position.z + steer.z * stepDistance;
+        if (!isWorldPositionBlocked(nextX, nextZ, actorRadius)) {
+            root.position.x = nextX;
+            root.position.z = nextZ;
+            continue;
+        }
+
+        // Try a lateral slide before giving up; this prevents small edge contacts from stopping movement.
+        const xOnly = root.position.x + steer.x * stepDistance;
+        const zOnly = root.position.z + steer.z * stepDistance;
+        const xClear = !isWorldPositionBlocked(xOnly, root.position.z, actorRadius);
+        const zClear = !isWorldPositionBlocked(root.position.x, zOnly, actorRadius);
+        if (xClear && zClear) {
+            if (Math.abs(steer.x) >= Math.abs(steer.z)) root.position.x = xOnly;
+            else root.position.z = zOnly;
+        } else if (xClear) root.position.x = xOnly;
+        else if (zClear) root.position.z = zOnly;
+    }
+    resolveWorldObstacleOverlaps(root, actorRadius);
+    const moved = root.position.subtract(start);
+    moved.y = 0;
+    return moved;
+}
+
 function moveToward(root, destination, speed, dt) {
     const delta = destination.subtract(root.position);
     delta.y = 0;
     const length = delta.length();
     if (length > 0.12) {
         const direction = delta.scale(1 / length);
-        root.position.addInPlace(direction.scale(Math.min(length, speed * dt)));
-        root.rotation.y = Math.atan2(direction.x, direction.z);
+        const moved = moveWithWorldAvoidance(root, direction, Math.min(length, speed * dt), 0.46);
+        if (moved.lengthSquared() > 0.0001)
+            root.rotation.y = Math.atan2(moved.x, moved.z);
+        return moved.lengthSquared() > 0.0001;
+    }
+    return false;
+}
+
+function resolveActorOverlaps() {
+    const actors = [];
+    const addActor = (root, radius, fixed = false) => {
+        if (!root || root.isDisposed?.() || root.isEnabled?.() === false) return;
+        actors.push({ root, radius, fixed });
+    };
+
+    addActor(player.root, 0.48);
+    for (const companion of companions) {
+        if (companion.active && companion.recruited && !companion.recovering)
+            addActor(companion.model.root, 0.46);
+    }
+    for (const enemy of enemies) {
+        if (!enemy.dead) addActor(enemy.root, enemy.kind === 'boss' ? 0.92 : 0.48);
+    }
+    for (const ally of summonedAllies) {
+        if (ally.hp > 0) addActor(ally.root, 0.34);
+    }
+    addActor(aureliaModel?.root, 0.46, true);
+    addActor(guardianNPC?.root, 0.48, true);
+
+    for (let pass = 0; pass < 3; pass++) {
+        let anyOverlap = false;
+        for (let i = 0; i < actors.length; i++) {
+            for (let j = i + 1; j < actors.length; j++) {
+                const a = actors[i], b = actors[j];
+                let dx = b.root.position.x - a.root.position.x;
+                let dz = b.root.position.z - a.root.position.z;
+                let distance = Math.hypot(dx, dz);
+                const required = a.radius + b.radius + 0.035;
+                if (distance >= required) continue;
+                if (distance < 0.0001) {
+                    const angle = ((i * 37 + j * 19) % 360) * Math.PI / 180;
+                    dx = Math.cos(angle); dz = Math.sin(angle); distance = 1;
+                }
+                const overlap = required - distance;
+                const nx = dx / distance, nz = dz / distance;
+                const moveA = a.fixed ? 0 : b.fixed ? overlap : overlap * 0.5;
+                const moveB = b.fixed ? 0 : a.fixed ? overlap : overlap * 0.5;
+                if (moveA > 0) { a.root.position.x -= nx * moveA; a.root.position.z -= nz * moveA; }
+                if (moveB > 0) { b.root.position.x += nx * moveB; b.root.position.z += nz * moveB; }
+                anyOverlap = true;
+            }
+        }
+        for (const actor of actors) resolveWorldObstacleOverlaps(actor.root, actor.radius);
+        if (!anyOverlap) break;
     }
 }
 // -----------------------------------------------------------------------------
@@ -3786,7 +4130,7 @@ function updateEnemies(dt) {
             if (d > preferred + 2) moveToward(enemy.root, targetRoot.position, enemy.speed * 0.86, dt);
             else if (d < preferred - 3) {
                 const away=enemy.root.position.subtract(targetRoot.position); away.y=0; if(away.lengthSquared()<0.01)away.x=1; away.normalize();
-                enemy.root.position.addInPlace(away.scale(enemy.speed*0.72*dt));
+                moveWithWorldAvoidance(enemy.root, away, enemy.speed * 0.72 * dt, 0.50);
             } else if (enemy.attackTimer <= 0) {
                 if (!hasActiveBarrierFor(targetRoot, true)) spawnEnemyProjectile(enemy,targetRoot,targetCompanion,targetSummon);
                 enemy.attackTimer=2.25;
@@ -3864,18 +4208,24 @@ function updateCompanions(dt) {
         }
 
         // Aurelia's automatic support now uses the same drawn rune and rising green beam.
-        if (c.role === 'Healer' && c.healTimer <= 0) {
+        if (c.role === 'Healer' && c.healTimer <= 0 && !c.model._attackRaf) {
             const injured = companions.find(other => other.active && other.recruited && !other.recovering && other.hp < other.maxHp * 0.72);
             if (injured) {
-                injured.hp = Math.min(injured.maxHp, injured.hp + 24);
                 c.healTimer = 5.5;
-                animateCharacterAttack(c.model);
-                playHealingEffect(injured.model.root);
-            } else if (state.hp < (getMaxHP()) * 0.72) {
-                state.hp = Math.min(getMaxHP(), state.hp + 20);
+                void animateCharacterAttack(c.model).then(completed => {
+                    if (!completed || !c.active || c.recovering || injured.recovering) return;
+                    injured.hp = Math.min(injured.maxHp, injured.hp + 24);
+                    playHealingEffect(injured.model.root);
+                    updateHUD();
+                });
+            } else if (state.hp < getMaxHP() * 0.72) {
                 c.healTimer = 5.5;
-                animateCharacterAttack(c.model);
-                playHealingEffect(player.root);
+                void animateCharacterAttack(c.model).then(completed => {
+                    if (!completed || !c.active || c.recovering) return;
+                    state.hp = Math.min(getMaxHP(), state.hp + 20);
+                    playHealingEffect(player.root);
+                    updateHUD();
+                });
             }
         }
 
@@ -4035,11 +4385,16 @@ function updateMovement(dt) {
     if (movement.lengthSquared() > 0) {
         movement.normalize();
         const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 2.6 : 4.7;
-        player.root.position.addInPlace(movement.scale(speed * dt));
-        player.root.rotation.y = Math.atan2(movement.x, movement.z);
-        state.stepTime += dt * 9;
-        player.root.position.y = Math.abs(Math.sin(state.stepTime)) * 0.055;
-        animateCharacterMovement(player, true, state.stepTime / 9);
+        const actualMovement = moveWithWorldAvoidance(player.root, movement, speed * dt, 0.48);
+        if (actualMovement.lengthSquared() > 0.0001) {
+            player.root.rotation.y = Math.atan2(actualMovement.x, actualMovement.z);
+            state.stepTime += dt * 9;
+            player.root.position.y = Math.abs(Math.sin(state.stepTime)) * 0.055;
+            animateCharacterMovement(player, true, state.stepTime / 9);
+        } else {
+            player.root.position.y += (0 - player.root.position.y) * Math.min(1, dt * 10);
+            animateCharacterMovement(player, false, state.stepTime / 9);
+        }
     }
     else {
         player.root.position.y += (0 - player.root.position.y) * Math.min(1, dt * 10);
@@ -4437,6 +4792,7 @@ engine.runRenderLoop(() => {
             state.hp = Math.min(getMaxHP(), state.hp + dt * 0.45);
         updateEnemies(dt);
         updateCompanions(dt);
+        resolveActorOverlaps();
         updateProjectiles(dt);
         updateNearby();
         if (toastTimer > 0) {
