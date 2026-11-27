@@ -1525,6 +1525,16 @@ function createPrisonCrystal(regionId) {
     return { regionId, root, crystal, shard, ring, halo, rune, cracks, material: crystalMaterial, shards: [], opened: false };
 }
 
+// Build one sealed Power Shard crystal for every region before the render loop starts.
+// The startup code calls this helper; each individual crystal is built by createPrisonCrystal().
+function createAllPrisonCrystals() {
+    for (const regionId of Object.keys(REGION_DATA)) {
+        if (prisonerCages[regionId]) continue;
+        const prison = createPrisonCrystal(regionId);
+        if (prison) prisonerCages[regionId] = prison;
+    }
+}
+
 function updatePrisonCrystalVisibility() {
     for (const [regionId, prison] of Object.entries(prisonerCages)) {
         const progress = state.regionProgress[regionId];
