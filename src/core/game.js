@@ -161,6 +161,86 @@ materials.stone.diffuseTexture = stoneTexture;
 materials.paleStone.diffuseTexture = stoneTexture;
 materials.path.diffuseTexture = stoneTexture;
 materials.roof.diffuseTexture = roofTexture;
+
+// High-detail pixel-art surface materials. These are 1024x1024 textures with
+// nearest-neighbour sampling, so the material details stay crisp instead of blurry.
+function createPixelArtMaterial(name, palette, seed = 1) {
+    const texture = new DynamicTexture(name + ' 1024px pixel atlas', { width: 1024, height: 1024 }, scene, false, Texture.NEAREST_SAMPLINGMODE);
+    const ctx = texture.getContext();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = palette.base;
+    ctx.fillRect(0, 0, 1024, 1024);
+    let value = seed >>> 0;
+    const random = () => { value = (value * 1664525 + 1013904223) >>> 0; return value / 4294967296; };
+
+    // Broad sewn panels and pixel-shaded folds.
+    for (let x = 0; x < 1024; x += 64) {
+        ctx.fillStyle = x % 128 === 0 ? palette.shadow : palette.mid;
+        ctx.fillRect(x, 0, 8, 1024);
+        ctx.fillStyle = palette.light;
+        ctx.fillRect(x + 8, 0, 3, 1024);
+    }
+    for (let y = 24; y < 1024; y += 128) {
+        ctx.fillStyle = palette.shadow;
+        ctx.fillRect(0, y, 1024, 5);
+        ctx.fillStyle = palette.light;
+        ctx.fillRect(0, y + 5, 1024, 2);
+    }
+
+    // Thousands of deliberately chunky pixel clusters create a hand-rendered texture.
+    for (let i = 0; i < 18500; i++) {
+        const x = Math.floor(random() * 256) * 4;
+        const y = Math.floor(random() * 256) * 4;
+        const pick = random();
+        ctx.fillStyle = pick < 0.42 ? palette.shadow : pick < 0.83 ? palette.mid : palette.light;
+        const w = (1 + Math.floor(random() * 4)) * 4;
+        const h = (1 + Math.floor(random() * 3)) * 4;
+        ctx.fillRect(x, y, w, h);
+    }
+
+    // Tiny stitch marks, metallic rivets and decorative trim are part of the texture,
+    // not extra transparent geometry, which keeps the scene relatively light.
+    ctx.fillStyle = palette.accent;
+    for (let x = 20; x < 1024; x += 48) {
+        ctx.fillRect(x, 12, 8, 4);
+        ctx.fillRect(x, 1008, 8, 4);
+    }
+    ctx.fillStyle = palette.light;
+    for (let y = 32; y < 1000; y += 64) {
+        ctx.fillRect(20, y, 8, 8);
+        ctx.fillRect(996, y, 8, 8);
+    }
+    // A small stepped crest gives the atlas a distinctive pixel-art motif.
+    const cx = 512, cy = 512;
+    ctx.fillStyle = palette.accent;
+    ctx.fillRect(cx - 24, cy - 64, 48, 32);
+    ctx.fillRect(cx - 48, cy - 32, 96, 48);
+    ctx.fillRect(cx - 32, cy + 16, 64, 32);
+    ctx.fillRect(cx - 8, cy + 48, 16, 32);
+    ctx.fillStyle = palette.light;
+    ctx.fillRect(cx - 8, cy - 48, 16, 80);
+    ctx.fillRect(cx - 32, cy - 8, 64, 16);
+
+    texture.update();
+    texture.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE);
+    texture.anisotropicFilteringLevel = 1;
+    const material = new StandardMaterial(name + ' detailed pixel-art material', scene);
+    material.diffuseTexture = texture;
+    material.specularColor = new Color3(0.14, 0.14, 0.14);
+    material.specularPower = 18;
+    material.useAlphaFromDiffuseTexture = false;
+    return material;
+}
+const pixelArtMaterials = {
+    warrior: createPixelArtMaterial('warrior', { base:'#563d32', shadow:'#261f20', mid:'#805344', light:'#c08a62', accent:'#e3bd75' }, 101),
+    knight: createPixelArtMaterial('knight', { base:'#344957', shadow:'#1a2732', mid:'#59778a', light:'#a9c6d0', accent:'#e7c66f' }, 202),
+    ranger: createPixelArtMaterial('ranger', { base:'#2c4935', shadow:'#152b24', mid:'#476d45', light:'#8ca66a', accent:'#d5b36c' }, 303),
+    mage: createPixelArtMaterial('mage', { base:'#34305b', shadow:'#191c37', mid:'#554f8d', light:'#a09bda', accent:'#5dd9ed' }, 404),
+    healer: createPixelArtMaterial('healer', { base:'#52624a', shadow:'#293b35', mid:'#849e6b', light:'#c7d6a0', accent:'#7ee0c2' }, 505),
+    summoner: createPixelArtMaterial('summoner', { base:'#254e4b', shadow:'#142d35', mid:'#367d78', light:'#75c3ae', accent:'#a9e7dd' }, 606)
+};
+const pixelSkinMaterial = createPixelArtMaterial('character skin', { base:'#9b6c4e', shadow:'#563c36', mid:'#c18b65', light:'#edc39a', accent:'#f5dfb8' }, 707);
+
 // A painted sky dome gives both the base and forest a real horizon, rather than a flat clear colour.
 const skyTexture = new DynamicTexture('etheria-sky-painting', { width: 1024, height: 512 }, scene, false);
 const skyCtx = skyTexture.getContext();
@@ -385,12 +465,15 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
     const arms = [];
     const legs = [];
     const gloves = [];
+    const pauldrons = [];
+    const boots = [];
     for (const side of [-1, 1]) {
         const shoulder = MeshBuilder.CreateSphere(`${name}-pauldron`, { diameter: 0.5 * size, segments: 12 }, scene);
         shoulder.parent = root;
         shoulder.position.set(side * 0.46 * size, 1.48 * size, 0);
         shoulder.scaling.set(1.25, 0.78, 1.0);
         shoulder.material = metal;
+        pauldrons.push(shoulder);
         const arm = MeshBuilder.CreateCylinder(`${name}-arm`, { height: 0.78 * size, diameterTop: 0.2 * size, diameterBottom: 0.27 * size, tessellation: 10 }, scene);
         arm.parent = root;
         arm.position.set(side * 0.51 * size, 1.03 * size, 0.03 * size);
@@ -411,6 +494,7 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
         boot.parent = root;
         boot.position.set(side * 0.2 * size, 0.12 * size, 0.12 * size);
         boot.material = materials.bark;
+        boots.push(boot);
     }
     // Detailed hand-held blade: grip, crossguard, pommel and bright steel edge.
     const weaponRoot = new TransformNode(`${name}-weapon-pivot`, scene);
@@ -487,7 +571,7 @@ function makeCharacter(name, outfit, weaponMaterial = materials.gold, size = 1, 
     roleCrest.parent = root;
     roleCrest.position.set(0, 2.43 * size, -0.02 * size);
     roleCrest.material = weaponMaterial;
-    const model = { root, body, head, weapon, weaponRoot, staffRoot, staffCrystal, bowRoot, shield, arms, gloves, legs, cloak, role, roleCrest };
+    const model = { root, body, chest, head, weapon, weaponRoot, staffRoot, staffCrystal, bowRoot, shield, arms, gloves, legs, cloak, role, roleCrest, pauldrons, boots };
     setCharacterRole(model, role);
     return model;
 }
@@ -514,6 +598,19 @@ function setCharacterRole(model, role) {
     } else {
         model.cloak.scaling.y = 1;
     }
+
+    const pixel = pixelArtMaterials[model.role] || pixelArtMaterials.warrior;
+    model.pixelClothMaterial = pixel;
+    model.pixelArmorMaterial = pixel;
+    model.body.material = pixel;
+    model.cloak.material = pixel;
+    model.arms.forEach(part => part.material = pixel);
+    model.legs.forEach(part => part.material = pixel);
+    model.gloves.forEach(part => part.material = pixelSkinMaterial);
+    model.head.material = pixelSkinMaterial;
+    model.chest.material = pixel;
+    model.pauldrons.forEach(part => part.material = pixel);
+    model.boots.forEach(part => part.material = pixel);
 }
 function animateCharacterAttack(model) {
     if (!model || !model.activeWeaponRoot || !model.root) return;
@@ -791,7 +888,7 @@ const REGION_DATA = {
         bossPosition: new Vector3(80, 0, -214), cagePosition: new Vector3(80, 4.8, -228),
         dungeonPosition: new Vector3(108, 0, -92), dungeonRoomPosition: new Vector3(140, 0, -92),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.enemy, bossMaterial: materials.bark,
-        crystalMaterial: materials.crystal, companionId: 'aurelia', rewardGold: 250, rewardXP: 300,
+        crystalMaterial: materials.crystal, shardName: 'Wildwood Power Shard', abilityReward: null, rewardGold: 250, rewardXP: 300,
         mobPositions: [
             new Vector3(-10,0,2), new Vector3(11,0,-28), new Vector3(-13,0,-58), new Vector3(12,0,-88),
             new Vector3(-11,0,-120), new Vector3(13,0,-151), new Vector3(-8,0,-181), new Vector3(3,0,-202)
@@ -804,7 +901,7 @@ const REGION_DATA = {
         bossPosition: new Vector3(80, 0, -494), cagePosition: new Vector3(80, 4.8, -508),
         dungeonPosition: new Vector3(108,0,-380), dungeonRoomPosition: new Vector3(140,0,-380),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.emberGlow, bossMaterial: materials.emberGround,
-        crystalMaterial: materials.emberGlow, companionId: 'darian', rewardGold: 360, rewardXP: 440,
+        crystalMaterial: materials.emberGlow, shardName: 'Ember Power Shard', abilityReward: 'barrier', rewardGold: 360, rewardXP: 440,
         mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-272-i*25))
     },
     frostveil: {
@@ -814,7 +911,7 @@ const REGION_DATA = {
         bossPosition: new Vector3(80, 0, -774), cagePosition: new Vector3(80, 4.8, -788),
         dungeonPosition: new Vector3(108,0,-660), dungeonRoomPosition: new Vector3(140,0,-660),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.frostCrystal, bossMaterial: materials.frostGround,
-        crystalMaterial: materials.frostCrystal, companionId: 'nyra', rewardGold: 420, rewardXP: 520,
+        crystalMaterial: materials.frostCrystal, shardName: 'Frost Power Shard', abilityReward: 'antiMagic', rewardGold: 420, rewardXP: 520,
         mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-552-i*25))
     },
     starfall: {
@@ -824,7 +921,7 @@ const REGION_DATA = {
         bossPosition: new Vector3(80, 0, -1054), cagePosition: new Vector3(80, 4.8, -1068),
         dungeonPosition: new Vector3(108,0,-940), dungeonRoomPosition: new Vector3(140,0,-940),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.starCrystal, bossMaterial: materials.starGround,
-        crystalMaterial: materials.starCrystal, companionId: 'seren', rewardGold: 560, rewardXP: 700,
+        crystalMaterial: materials.starCrystal, shardName: 'Starfall Power Shard', abilityReward: 'deathBeam', rewardGold: 560, rewardXP: 700,
         mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-832-i*25))
     },
     mire: {
@@ -834,15 +931,16 @@ const REGION_DATA = {
         bossPosition: new Vector3(80, 0, -1334), cagePosition: new Vector3(80, 4.8, -1348),
         dungeonPosition: new Vector3(108,0,-1220), dungeonRoomPosition: new Vector3(140,0,-1220),
         entryDirection: new Vector3(0, 0, 1), enemyMaterial: materials.mireGlow, bossMaterial: materials.mireGround,
-        crystalMaterial: materials.mireGlow, companionId: 'rowan', rewardGold: 640, rewardXP: 820,
+        crystalMaterial: materials.mireGlow, shardName: 'Mire Power Shard', abilityReward: 'summoner', rewardGold: 640, rewardXP: 820,
         mobPositions: Array.from({length:8},(_,i)=>new Vector3(80 + [-11,12,-14,13,-12,14,-9,2][i],0,-1112-i*25))
     }
 };
 function freshRegionProgress() {
-    return Object.fromEntries(Object.keys(REGION_DATA).map(id => [id, { kills: 0, elapsed: 0, ambushesTriggered: 0, bossUnlocked: false, bossDefeated: false, rescued: false, dungeonCleared: false }]));
+    return Object.fromEntries(Object.keys(REGION_DATA).map(id => [id, { kills: 0, elapsed: 0, ambushesTriggered: 0, bossUnlocked: false, bossDefeated: false, rescued: false, shardClaimed: false, dungeonCleared: false }]));
 }
 const regionHazards = [];
 const dungeonLandmarks = [];
+const regionVisuals = {};
 const forestMeshStart = scene.meshes.length;
 const forestTransformStart = scene.transformNodes.length;
 const forestLightStart = scene.lights.length;
@@ -984,6 +1082,9 @@ function makeWorldRoad(from, to, width = 5.2) {
 function buildAdditionalRegions() {
     const configs = [REGION_DATA.emberfall, REGION_DATA.frostveil, REGION_DATA.mire, REGION_DATA.starfall];
     for (const region of configs) {
+        const regionMeshStart = scene.meshes.length;
+        const regionTransformStart = scene.transformNodes.length;
+        const regionLightStart = scene.lights.length;
         const ground = MeshBuilder.CreateGround(`${region.name} terrain`, { width: 144, height: 286, subdivisions: 4 }, scene);
         ground.position.copyFrom(region.center);
         ground.position.y = 0.012;
@@ -1106,6 +1207,11 @@ function buildAdditionalRegions() {
             pillar.position.set(region.center.x + (region.id === 'frostveil' || region.id === 'mire' ? 0 : side * 3.3), 2.1, region.center.z + (region.id === 'frostveil' || region.id === 'mire' ? side * 3.3 : 25));
             pillar.material = archMat;
         }
+        regionVisuals[region.id] = {
+            meshes: scene.meshes.slice(regionMeshStart),
+            transforms: scene.transformNodes.slice(regionTransformStart),
+            lights: scene.lights.slice(regionLightStart)
+        };
     }
     // One connected expedition route: Forest -> Emberfall -> Frostveil -> Starfall -> Mire.
     for (const z of [-240, -520, -800, -1080]) makeWorldRoad(new Vector3(80,0,z+1), new Vector3(80,0,z-1), 7.2);
@@ -1158,6 +1264,11 @@ for (const mote of fireflies) {
     mote.x += FOREST_OFFSET.x;
     mote.z += FOREST_OFFSET.z;
 }
+regionVisuals.forest = {
+    meshes: scene.meshes.slice(forestMeshStart),
+    transforms: scene.transformNodes.slice(forestTransformStart),
+    lights: scene.lights.slice(forestLightStart)
+};
 // Build the other four regions after the forest-only offset pass so their world coordinates stay exact.
 buildAdditionalRegions();
 // Home base: a small but explorable headquarters with distinct places to use.
@@ -1268,7 +1379,7 @@ sylva.root.position.set(82, 0, 72);
 const aureliaModel = makeCharacter('Aurelia', mat('Aurelia healer robes', new Color3(0.42, 0.49, 0.34)), materials.crystal, 1, 'healer');
 aureliaModel.root.position.set(3.5 + FOREST_OFFSET.x, 0, -3.8 + FOREST_OFFSET.z);
 aureliaModel.root.setEnabled(false);
-// Additional rescue characters are placeholders until their exact roles and abilities
+// Additional character models retained for future content are placeholders until their exact roles and abilities
 // are planned with the player. Their recruitment is always gated behind their region boss.
 const darianModel = makeCharacter('Darian', mat('Darian emberguard armour', new Color3(0.52, 0.23, 0.15)), materials.emberGlow, 1.04, 'warrior');
 const nyraModel = makeCharacter('Nyra', mat('Nyra frostweave robes', new Color3(0.38, 0.57, 0.69)), materials.frostCrystal, 1, 'mage');
@@ -1288,16 +1399,11 @@ guardianMarker.rotation.x = Math.PI / 2;
 guardianMarker.material = materials.gold;
 guardianNPC.root.setEnabled(false);
 guardianMarker.setEnabled(false);
-// Infinity allows every rescued companion to join the active party.
+// Infinity allows every Power Shard to join the active party.
 const MAX_ACTIVE_COMPANIONS = Infinity;
 const companions = [
     { id: 'reaphel', name: 'Reaphel', role: 'Knight', model: reaphel, active: true, recruited: true, hp: 135, maxHp: 135, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'aurelia', name: 'Aurelia', role: 'Healer', model: aureliaModel, active: false, recruited: false, hp: 95, maxHp: 95, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'darian', name: 'Darian', role: 'Warrior', model: darianModel, active: false, recruited: false, hp: 125, maxHp: 125, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'nyra', name: 'Nyra', role: 'Mage', model: nyraModel, active: false, recruited: false, hp: 88, maxHp: 88, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 },
-    { id: 'rowan', name: 'Rowan', role: 'Summoner', model: rowanModel, active: false, recruited: false, hp: 112, maxHp: 112, attackTimer: 0, healTimer: 0, summonTimer: 20, specialCooldown: 0, upgradeLevel: 0, recovering: false, recoverTimer: 0 },
-    { id: 'seren', name: 'Seren', role: 'Healer', model: serenModel, active: false, recruited: false, hp: 105, maxHp: 105, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 }
+    { id: 'sylva', name: 'Sylva', role: 'Archer', model: sylva, active: true, recruited: true, hp: 90, maxHp: 90, attackTimer: 0, healTimer: 0, recovering: false, recoverTimer: 0, upgradeLevel: 0, summonTimer: 20, specialCooldown: 0 }
 ];
 for (const companion of companions) companion.model.root.metadata = { ...(companion.model.root.metadata || {}), companionId: companion.id };
 let selectedCompanion = null;
@@ -1307,8 +1413,8 @@ const state = {
     gold: 100, crystals: 0, tokens: 0, weaponLevel: 1, wolfKills: 0, bossUnlocked: false, bossDefeated: false,
     aureliaRecruited: false, formation: 'balanced', strategy: 'protect', command: 'follow',
     worldMinutes: 9 * 60, weatherIndex: 0, combatTimer: 0, attackCooldown: 0, defend: false,
-    defaultAbility: 'arcane', abilityCooldowns: { arcane: 0, heal: 0, nova: 0, barrier: 0, antiMagic: 0, deathBeam: 0 },
-    abilityLevels: { arcane: 1, heal: 1, nova: 1, barrier: 1, antiMagic: 1, deathBeam: 1 }, manaUpgradeLevel: 0, companionUpgradeLevels: {}, playerFrozenTimer: 0, dungeonState: null,
+    defaultAbility: 'arcane', abilityCooldowns: { arcane: 0, heal: 0, nova: 0, barrier: 0, antiMagic: 0, deathBeam: 0, summoner: 0 },
+    abilityLevels: { arcane: 1, heal: 1, nova: 1, barrier: 1, antiMagic: 1, deathBeam: 1, summoner: 1 }, manaUpgradeLevel: 0, healthUpgradeLevel: 0, companionUpgradeLevels: {}, powerShards: 0, summonTimer: 20, advanceAnchor: null, playerFrozenTimer: 0, dungeonState: null,
     crystalsCollected: new Set(), questComplete: false, nightSpawned: false, randomEventTimer: 0,
     regionProgress: freshRegionProgress(), cutsceneActive: false,
     playerDamageFlash: 0, stepTime: 0, protectionTimer: 0, lastSaveTime: 0
@@ -1327,6 +1433,7 @@ let summonedAllies = [];
 let activeBarriers = [];
 let interactables = [];
 let projectiles = [];
+let enemyProjectiles = [];
 let enemyId = 0;
 const keys = new Set();
 const prisonerCages = {};
@@ -1350,36 +1457,27 @@ function ensureRescueOverlay() {
 
 function createPrisonCrystal(regionId) {
     const region = REGION_DATA[regionId];
-    const companion = companionById[region.companionId];
-    if (!region || !companion) return null;
-    const root = new TransformNode(`${regionId} floating rescue crystal`, scene);
+    if (!region) return null;
+    const root = new TransformNode(`${regionId} floating power-shard crystal`, scene);
     root.position.copyFrom(region.cagePosition);
-    const crystalMaterial = new StandardMaterial(`${regionId} prison crystal material`, scene);
+    const crystalMaterial = new StandardMaterial(`${regionId} power-shard prison material`, scene);
     crystalMaterial.diffuseColor = region.crystalMaterial.diffuseColor.clone();
     crystalMaterial.emissiveColor = region.crystalMaterial.emissiveColor.clone();
     crystalMaterial.alpha = 0.34;
     crystalMaterial.specularColor = new Color3(0.9, 0.98, 1);
     crystalMaterial.specularPower = 110;
-    const crystal = MeshBuilder.CreatePolyhedron(`${regionId} sealed prisoner crystal`, { type: 1, size: 1.45 }, scene);
-    crystal.parent = root;
-    crystal.position.y = 0.1;
-    crystal.scaling.set(1.25, 2.35, 1.15);
-    crystal.material = crystalMaterial;
+    const crystal = MeshBuilder.CreatePolyhedron(`${regionId} sealed Power Shard crystal`, { type: 1, size: 1.45 }, scene);
+    crystal.parent = root; crystal.position.y = 0.1; crystal.scaling.set(1.25, 2.35, 1.15); crystal.material = crystalMaterial;
     glowLayer.addIncludedOnlyMesh(crystal);
+    const shard = MeshBuilder.CreatePolyhedron(`${regionId} Power Shard inside crystal`, { type: 1, size: 0.52 }, scene);
+    shard.parent = root; shard.position.set(0, 0.12, 0); shard.scaling.set(0.62, 1.35, 0.62); shard.material = region.crystalMaterial;
+    glowLayer.addIncludedOnlyMesh(shard);
     const ring = MeshBuilder.CreateTorus(`${regionId} prison seal ring`, { diameter: 2.65, thickness: 0.07, tessellation: 32 }, scene);
-    ring.parent = root;
-    ring.position.y = -1.85;
-    ring.rotation.x = Math.PI / 2;
-    ring.material = region.crystalMaterial;
+    ring.parent = root; ring.position.y = -1.85; ring.rotation.x = Math.PI / 2; ring.material = region.crystalMaterial;
     const halo = MeshBuilder.CreateTorus(`${regionId} prison halo`, { diameter: 2.25, thickness: 0.055, tessellation: 32 }, scene);
-    halo.parent = root;
-    halo.position.y = 1.6;
-    halo.rotation.x = Math.PI / 2;
-    halo.material = region.crystalMaterial;
+    halo.parent = root; halo.position.y = 1.6; halo.rotation.x = Math.PI / 2; halo.material = region.crystalMaterial;
     const rune = MeshBuilder.CreatePolyhedron(`${regionId} prison rune`, { type: 1, size: 0.34 }, scene);
-    rune.parent = root;
-    rune.position.y = 2.55;
-    rune.material = region.crystalMaterial;
+    rune.parent = root; rune.position.y = 2.55; rune.material = region.crystalMaterial;
     const crackPaths = [
         [new Vector3(-0.1,-1.75,1.02),new Vector3(0.12,-1.15,1.1),new Vector3(-0.02,-0.55,1.17),new Vector3(0.22,0.05,1.17),new Vector3(0.04,0.65,1.12),new Vector3(0.22,1.48,0.88)],
         [new Vector3(-0.02,-0.55,1.17),new Vector3(-0.55,-0.25,1.03),new Vector3(-0.82,0.15,0.9)],
@@ -1388,41 +1486,27 @@ function createPrisonCrystal(regionId) {
     ];
     const cracks = crackPaths.map((points, index) => {
         const line = MeshBuilder.CreateLines(`${regionId} crystal fracture ${index}`, { points }, scene);
-        line.parent = root;
-        line.color = new Color3(0.92, 0.99, 1);
-        line.isPickable = false;
-        line.setEnabled(false);
-        return line;
+        line.parent = root; line.color = new Color3(0.92, 0.99, 1); line.isPickable = false; line.setEnabled(false); return line;
     });
-    companion.model.root.position.set(region.cagePosition.x, region.cagePosition.y - 1.35, region.cagePosition.z);
-    companion.model.root.rotation.y = Math.atan2(region.entryDirection.x, region.entryDirection.z);
-    companion.model.root.setEnabled(true);
-    return { regionId, root, crystal, ring, halo, rune, cracks, companion, material: crystalMaterial, shards: [], opened: false };
-}
-
-function createAllPrisonCrystals() {
-    for (const regionId of Object.keys(REGION_DATA)) prisonerCages[regionId] = createPrisonCrystal(regionId);
-    updatePrisonCrystalVisibility();
+    root.setEnabled(false);
+    return { regionId, root, crystal, shard, ring, halo, rune, cracks, material: crystalMaterial, shards: [], opened: false };
 }
 
 function updatePrisonCrystalVisibility() {
     for (const [regionId, prison] of Object.entries(prisonerCages)) {
         const progress = state.regionProgress[regionId];
-        const locked = !progress?.rescued;
-        if (locked) {
-            // Re-enable an intact prison when loading an older save or starting a fresh run.
-            prison.opened = false;
-            prison.crystal.setEnabled(true);
-            prison.ring.setEnabled(true);
-            prison.halo.setEnabled(true);
-            prison.rune.setEnabled(true);
-            prison.cracks.forEach(line => line.setEnabled(false));
-            prison.root.setEnabled(true);
-            prison.companion.model.root.position.set(prison.root.position.x, prison.root.position.y - 1.35, prison.root.position.z);
-            prison.companion.model.root.setEnabled(true);
-        } else {
+        const available = !!progress?.bossDefeated && !progress?.shardClaimed;
+        const show = available && state.zone === regionId && !state.cutsceneActive;
+        if (progress?.shardClaimed) {
             prison.root.setEnabled(false);
-            prison.companion.model.root.setEnabled(!!prison.companion.active);
+            prison.opened = true;
+            continue;
+        }
+        prison.root.setEnabled(show || (activeRescueCutscene?.regionId === regionId));
+        if (!show && activeRescueCutscene?.regionId !== regionId) {
+            prison.cracks.forEach(line => line.setEnabled(false));
+            prison.crystal.setEnabled(true); prison.shard.setEnabled(true);
+            prison.ring.setEnabled(true); prison.halo.setEnabled(true); prison.rune.setEnabled(true);
         }
     }
 }
@@ -1442,27 +1526,19 @@ function finishRescueCutscene(skipped = false) {
     if (cutscene.frameHandle) cancelAnimationFrame(cutscene.frameHandle);
     if (cutscene.hand && !cutscene.hand.isDisposed()) cutscene.hand.dispose();
     if (cutscene.touchSpark && !cutscene.touchSpark.isDisposed()) cutscene.touchSpark.dispose();
+    if (prison.shard && !prison.shard.isDisposed()) prison.shard.dispose();
     for (const shard of prison.shards || []) if (shard && !shard.isDisposed()) shard.dispose();
     prison.shards = [];
     prison.root.setEnabled(false);
     prison.opened = true;
     const region = REGION_DATA[regionId];
     const progress = state.regionProgress[regionId];
-    const companion = prison.companion;
-    progress.rescued = true;
-    companion.recruited = true;
-    companion.recovering = false;
-    companion.hp = companion.maxHp;
-    if (regionId === 'forest') state.aureliaRecruited = true;
-    // The first rescue joins automatically. Later recruits become available in the planning table.
-    companion.active = regionId === 'forest' || activeCompanions().length < MAX_ACTIVE_COMPANIONS;
-    companion.model.root.setEnabled(companion.active);
-    if (companion.active) {
-        companion.model.root.position.copyFrom(player.root.position.add(new Vector3(2 + (activeCompanions().length % 2), 0, 1.5)));
-    }
-    camera.alpha = cameraSnapshot.alpha;
-    camera.beta = cameraSnapshot.beta;
-    camera.radius = cameraSnapshot.radius;
+    if (!progress.shardClaimed) state.powerShards = (state.powerShards || 0) + 1;
+    progress.shardClaimed = true;
+    progress.rescued = true; // retained as a compatibility flag for old saves and region gates
+    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = false; }
+
+    camera.alpha = cameraSnapshot.alpha; camera.beta = cameraSnapshot.beta; camera.radius = cameraSnapshot.radius;
     camera.target.copyFrom(player.root.position.add(new Vector3(0, 1.2, 0)));
     camera.inertia = cameraSnapshot.inertia;
     if (cutscene.heroRotation !== undefined) player.root.rotation.y = cutscene.heroRotation;
@@ -1478,28 +1554,27 @@ function finishRescueCutscene(skipped = false) {
     camera.attachControl(canvas, true);
     if (camera.inputs.attached.pointers) camera.inputs.attached.pointers.buttons = cameraSnapshot.pointerButtons || [0, 1];
     if (rescueCutsceneOverlay) rescueCutsceneOverlay.style.display = 'none';
-    state.cutsceneActive = false;
-    state.paused = previousPaused;
-    state.defend = false;
-    keys.clear();
-    nearby = null;
+    state.cutsceneActive = false; state.paused = previousPaused; state.defend = false;
+    keys.clear(); nearby = null;
     updatePrisonCrystalVisibility();
-    updateZoneFromPosition();
     updateHUD();
+    updateWorldMapNodes();
+
     const unlockMessages = {
-        emberfall: 'NEW ABILITY UNLOCKED: BARRIER',
-        frostveil: 'NEW ABILITY UNLOCKED: ANTI-MAGIC BARRIER',
-        starfall: 'NEW ABILITY UNLOCKED: DEATH BEAM',
-        mire: 'NEW COMPANION UNLOCKED: ROWAN THE SUMMONER'
+        forest: 'WILDWOOD POWER SHARD ACQUIRED',
+        emberfall: 'NEW POWER UNLOCKED: BARRIER',
+        frostveil: 'NEW POWER UNLOCKED: ANTI-MAGIC BARRIER',
+        starfall: 'NEW POWER UNLOCKED: DEATH BEAM',
+        mire: 'NEW POWER UNLOCKED: SUMMONER'
     };
     if (regionId === 'starfall') {
-        setObjective('Beyond the Starfall Expanse', `${companion.name} is free. The road now leads into the Sunken Mire—and further lands remain beyond it.`);
+        setObjective('Beyond the Starfall Expanse', 'The Starfall Power Shard has awakened. The route now opens into the Sunken Mire—and further lands remain beyond it.');
     } else if (regionId === 'mire') {
-        setObjective('The Mire is not the end', `${companion.name} is free. New routes are appearing beyond the known regions.`);
+        setObjective('The Mire is not the end', 'The final known Power Shard has awakened. New routes can still appear beyond the known regions.');
     } else {
-        setObjective(`${companion.name} rescued`, `${companion.name} has been freed from the ${region.name} crystal prison. The next region is now open.`);
+        setObjective(`${region.name} Power Shard claimed`, `${region.shardName} has joined your power reserve. The next region is now open.`);
     }
-    showToast(`${companion.name} rescued! ${unlockMessages[regionId] || 'New region unlocked.'}`, 5.5);
+    showToast(`${region.shardName} acquired! ${unlockMessages[regionId] || 'Power increased.'}`, 5.5);
     void saveGame(true);
 }
 
@@ -1511,6 +1586,13 @@ function createPrisonShards(prison) {
         shard.material = prison.material;
         shard.isPickable = false;
         prison.shards.push(shard);
+    }
+    if (prison.shard && !prison.shard.isDisposed()) {
+        const shardPosition = prison.shard.getAbsolutePosition();
+        prison.shard.parent = null;
+        prison.shard.position.copyFrom(shardPosition);
+        prison.shard.setEnabled(true);
+        prison.shard.scaling.setAll(1.15);
     }
     prison.crystal.setEnabled(false);
     prison.ring.setEnabled(false);
@@ -1549,7 +1631,7 @@ function beginRescueCutscene(regionId) {
     state.defend = false;
     keys.clear();
     prison.cracks.forEach(line => line.setEnabled(false));
-    setRescueCaption(regionId, `${companionById[region.companionId].name} is still trapped`, 'The crystal prison hums with ancient magic.');
+    setRescueCaption(regionId, `${region.shardName} is sealed`, 'A rare Power Shard pulses inside the crystal prison.');
     const hand = MeshBuilder.CreateSphere('rescue magic gathered in hero hand', { diameter: 0.19, segments: 16 }, scene);
     hand.material = region.crystalMaterial;
     hand.isPickable = false;
@@ -1561,7 +1643,8 @@ function beginRescueCutscene(regionId) {
     activeRescueCutscene = {
         regionId, prison, cameraSnapshot, previousPaused, walkStart, walkStartRotation,
         heroRotation, armRotations, handPositions, heroOriginalY, stand, desiredRotation,
-        startTime: performance.now(), hand, touchSpark, shardsCreated: false, frameHandle: 0
+        startTime: performance.now(), hand, touchSpark, shardsCreated: false, frameHandle: 0,
+        shardStart: prison.shard ? prison.shard.getAbsolutePosition().clone() : prison.root.getAbsolutePosition().clone()
     };
     const lerpAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
     const smooth = t => { t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
@@ -1645,7 +1728,13 @@ function beginRescueCutscene(regionId) {
             }
             c.hand.visibility = 1 - t;
             c.touchSpark.visibility = 1 - t;
-            setRescueCaption(regionId, `${companionById[region.companionId].name} is free`, 'The crystal finally bursts into falling shards.');
+            if (prison.shard && !prison.shard.isDisposed()) {
+                const destination = player.root.position.add(new Vector3(0, 1.7, 0));
+                prison.shard.position.copyFrom(Vector3.Lerp(c.shardStart, destination, t));
+                prison.shard.rotation.y += 0.035;
+                prison.shard.scaling.setAll(1.15 * (1 - t * 0.28));
+            }
+            setRescueCaption(regionId, `${region.shardName} is awakening`, 'The Power Shard rises from the falling crystal fragments.');
         } else {
             const t = smooth((elapsed - 24500) / 3000);
             camera.alpha = lerpAngle(camera.alpha, cameraSnapshot.alpha, 0.065);
@@ -1666,15 +1755,13 @@ function finishRegionBossProgress(regionId) {
     if (!region || !progress) return;
     progress.bossDefeated = true;
     progress.bossUnlocked = true;
-    // This fallback is only for a missing prison object. Normal boss defeats
-    // must finish the visible rescue cutscene before the next region unlocks.
+    if (!progress.shardClaimed) state.powerShards = (state.powerShards || 0) + 1;
+    progress.shardClaimed = true;
     progress.rescued = true;
-    const companion = companionById[region.companionId];
-    if (companion) { companion.recruited = true; companion.active = regionId === 'forest' || activeCompanions().length < MAX_ACTIVE_COMPANIONS; }
-    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = true; }
-    updatePrisonCrystalVisibility();
-    updateHUD();
-    void saveGame(true);
+    progress.shardClaimed = true;
+    state.powerShards = Math.max(state.powerShards || 0, Object.values(state.regionProgress).filter(p => p.shardClaimed).length);
+    if (regionId === 'forest') { state.bossDefeated = true; state.questComplete = true; state.aureliaRecruited = false; }
+    updatePrisonCrystalVisibility(); updateHUD(); void saveGame(true);
 }
 
 function createInteractables() {
@@ -1858,6 +1945,14 @@ function addRegionalEnemy(regionId, position, index = 0, dungeonOnly = false) {
         leg.position.set(x, 0.36, z);
         leg.material = region.enemyMaterial;
     }
+    const ranged = regionId !== 'forest' && index % 3 === 1;
+    let rangedFocus = null;
+    if (ranged) {
+        const staff = MeshBuilder.CreateCylinder(`${region.enemyName} caster staff`, {height:1.55,diameter:0.09,tessellation:8},scene);
+        staff.parent=root; staff.position.set(0.72,0.98,-0.12); staff.rotation.z=-0.12; staff.material=region.crystalMaterial;
+        rangedFocus = MeshBuilder.CreatePolyhedron(`${region.enemyName} ranged focus`,{type:1,size:0.22},scene);
+        rangedFocus.parent=staff; rangedFocus.position.y=0.82; rangedFocus.material=region.crystalMaterial; glowLayer.addIncludedOnlyMesh(rangedFocus);
+    }
     const targetRing = MeshBuilder.CreateTorus(`${region.enemyName} target ring`, { diameter: 1.55, thickness: 0.04, tessellation: 24 }, scene);
     targetRing.parent = root;
     targetRing.position.y = 0.07;
@@ -1865,7 +1960,7 @@ function addRegionalEnemy(regionId, position, index = 0, dungeonOnly = false) {
     targetRing.material = materials.enemyEye;
     const difficulty = region.difficulty || 1;
     const enemyHP = Math.round(165 + difficulty * 52 + index * 12);
-    const enemy = { id: enemyId, kind: 'regional', regionId, displayName: region.enemyName, root, body, hp: enemyHP, maxHp: enemyHP, speed: 1.82 + Math.min(0.7, difficulty * 0.12) + (index % 2) * 0.12, damage: Math.round(17 + difficulty * 5 + index * 0.8), attackTimer: 1.1, specialTimer: 0, dead: false, sightRadius: 38 + difficulty * 2, detectionRange: 22 + difficulty * 1.5, aggro: 22 + difficulty * 1.5, frozenTimer: 0, frozenMeshes: null, dungeonOnly };
+    const enemy = { id: enemyId, kind: 'regional', regionId, displayName: ranged ? `${region.enemyName} Arcanist` : region.enemyName, ranged, rangedFocus, preferredRange: 12, root, body, hp: enemyHP, maxHp: enemyHP, speed: 1.82 + Math.min(0.7, difficulty * 0.12) + (index % 2) * 0.12, damage: Math.round(17 + difficulty * 5 + index * 0.8), attackTimer: 1.1, specialTimer: 0, dead: false, sightRadius: 38 + difficulty * 2, detectionRange: 22 + difficulty * 1.5, aggro: 22 + difficulty * 1.5, frozenTimer: 0, frozenMeshes: null, dungeonOnly };
     enemies.push(enemy);
     return enemy;
 }
@@ -1916,7 +2011,7 @@ function addRegionalBoss(regionId) {
     const boss = { id: ++enemyId, kind: 'boss', regionId, displayName: region.bossName, root, body, hp: bossHP, maxHp: bossHP, speed: 1.48 + difficulty * 0.08, damage: Math.round(25 + difficulty * 6), attackTimer: 1.55, specialTimer: 15, dead: false, sightRadius: 58, detectionRange: 34, aggro: 34, frozenTimer: 0, frozenMeshes: null };
     enemies.push(boss);
     showToast(`${region.bossName} has awakened!`, 4);
-    setObjective(`Defeat ${region.bossName}`, `The boss of ${region.name} guards a crystal prison. Defeat it to free the trapped companion.`);
+    setObjective(`Defeat ${region.bossName}`, `The boss of ${region.name} guards a crystal prison. Defeat it to free the sealed Power Shard.`);
     return boss;
 }
 
@@ -1944,9 +2039,12 @@ function isRegionUnlocked(regionId) {
     if (index < 0) return regionId === 'base';
     if (index === 0) return true;
     const previous = REGION_ORDER[index - 1];
-    return !!state.regionProgress[previous]?.rescued;
+    const progress = state.regionProgress[previous];
+    return !!(progress?.shardClaimed || progress?.rescued);
 }
+
 function getMaxMana() { return 80 + (state.level - 1) * 8 + (state.manaUpgradeLevel || 0) * 20; }
+function getMaxHP() { return 120 + (state.level - 1) * 14 + (state.healthUpgradeLevel || 0) * 20; }
 
 function applyEnvironmentalHazards(dt) {
     if (state.zone !== 'emberfall' || !regionHazards.length) return;
@@ -2002,48 +2100,40 @@ function breakBarrier(field) {
 
 function createProtectionField(antiMagic = false) {
     const id = antiMagic ? 'antiMagic' : 'barrier';
-    if (!isAbilityUnlocked(id)) { showToast('This ability has not been unlocked yet.'); return; }
+    if (!isAbilityUnlocked(id)) { showToast('This Power Shard ability has not been unlocked yet.'); return; }
     const level = Math.max(1, Number(state.abilityLevels[id]) || 1);
-    for (let i=activeBarriers.length-1;i>=0;i--) {
-        const previous=activeBarriers[i];
-        if(previous.id===id&&!previous.broken){if(previous.root&&!previous.root.isDisposed())previous.root.dispose();if(previous.shellMaterial)previous.shellMaterial.dispose();if(previous.shardMaterial)previous.shardMaterial.dispose();activeBarriers.splice(i,1);}
-    }
     const maxHp = antiMagic ? 50 + (level - 1) * 8 : 100 + (level - 1) * 12;
     const duration = antiMagic ? Math.min(25, 15 + (level - 1) * 1.1) : Math.min(30, 20 + (level - 1) * 1.2);
     const radius = antiMagic ? 15 : 10;
     const cost = antiMagic ? 88 : 58;
     if (state.mana < cost) { showToast(`This barrier requires ${cost} MP.`); return; }
     state.mana -= cost;
-    const root = new TransformNode(antiMagic ? 'anti-magic shield field' : 'protective barrier field', scene);
-    root.parent = player.root;
-    root.position.set(0, 0, 0);
+    state.abilityCooldowns[id] = antiMagic ? 22 : 18;
     const color = antiMagic ? new Color3(0.25,0.56,1) : new Color3(0.1,0.58,1);
-    const shellMaterial = new StandardMaterial(`${id} field shell material`, scene);
-    shellMaterial.diffuseColor = color.clone(); shellMaterial.emissiveColor = color.scale(0.35);
-    shellMaterial.alpha = 0.2; shellMaterial.backFaceCulling = false; shellMaterial.wireframe = false;
-    const shell = MeshBuilder.CreateSphere(`${id} translucent spherical shield`, { diameter: radius * 2, segments: 32 }, scene);
-    shell.parent = root; shell.position.y = radius * 0.48; shell.scaling.y = 0.88; shell.material = shellMaterial; shell.isPickable = false;
-    const ring = MeshBuilder.CreateTorus(`${id} perimeter ring`, { diameter: radius * 2, thickness: 0.085, tessellation: 64 }, scene);
-    ring.parent = root; ring.position.y = 0.08; ring.rotation.x = Math.PI / 2; ring.material = shellMaterial; ring.isPickable = false;
-    const shardMaterial = new StandardMaterial(`${id} crystal shard material`, scene);
-    shardMaterial.diffuseColor = color.clone(); shardMaterial.emissiveColor = color.scale(0.8);
-    const cracks=[];
-    for(let i=0;i<8;i++){
-        const angle=i*Math.PI/4;
-        const points=[new Vector3(0,radius*0.22, radius*0.91),new Vector3(Math.cos(angle)*0.6,radius*0.42, radius*0.72),new Vector3(Math.cos(angle)*1.35,radius*0.5, radius*0.46)];
-        const line=MeshBuilder.CreateLines(`${id} barrier crack ${i}`,{points},scene);line.parent=root;line.color=new Color3(0.8,0.95,1);line.isPickable=false;line.setEnabled(false);cracks.push(line);
-    }
-    const beams=[];
-    for(let i=0;i<8;i++){
-        const a=i*Math.PI/4;
-        const beam=MeshBuilder.CreateCylinder(`${id} blue boundary beam`,{height:radius*1.05,diameter:0.12,tessellation:8},scene);
-        beam.parent=root;beam.position.set(Math.cos(a)*radius, radius*0.52, Math.sin(a)*radius);beam.material=shellMaterial;beam.isPickable=false;beams.push(beam);
-    }
-    const field={id,antiMagic,root,shell,ring,shellMaterial,cracks,beams,shardMaterial,shards:[],maxHp,hp:maxHp,radius,duration,timeLeft:duration,broken:false};
-    activeBarriers.push(field);
-    drawMagicGlyph(player.root.position.add(new Vector3(0,0.06,0)),color,{floor:true,size:radius*0.72,duration:1100});
-    showToast(antiMagic ? 'Anti-Magic Barrier raised! Enemy magic is suppressed while it holds.' : 'Barrier raised! Stay inside the blue field.',4);
-    state.abilityCooldowns[id]=antiMagic?22:18;
+    // The drawn ring-and-star completes before any wall or dome appears.
+    drawMagicGlyph(player.root.position.add(new Vector3(0,0.065,0)),color,{floor:true,size:radius*0.9,duration:1450},()=>{
+        for (let i=activeBarriers.length-1;i>=0;i--) {
+            const old=activeBarriers[i];
+            if(old.id===id&&!old.broken){if(old.root&&!old.root.isDisposed())old.root.dispose();if(old.shellMaterial)old.shellMaterial.dispose();if(old.shardMaterial)old.shardMaterial.dispose();activeBarriers.splice(i,1);}
+        }
+        const root = new TransformNode(antiMagic ? 'anti-magic shield field' : 'protective barrier field', scene);
+        root.parent = player.root; root.position.set(0,0,0);
+        const shellMaterial = new StandardMaterial(`${id} field shell material`, scene);
+        shellMaterial.diffuseColor=color.clone();shellMaterial.emissiveColor=color.scale(0.35);shellMaterial.alpha=0.2;shellMaterial.backFaceCulling=false;
+        const shell=MeshBuilder.CreateSphere(`${id} translucent spherical shield`,{diameter:radius*2,segments:32},scene);
+        shell.parent=root;shell.position.y=radius*0.48;shell.scaling.y=0.88;shell.material=shellMaterial;shell.isPickable=false;
+        const ring=MeshBuilder.CreateTorus(`${id} perimeter ring`,{diameter:radius*2,thickness:0.085,tessellation:64},scene);
+        ring.parent=root;ring.position.y=0.08;ring.rotation.x=Math.PI/2;ring.material=shellMaterial;ring.isPickable=false;
+        const shardMaterial=new StandardMaterial(`${id} crystal shard material`,scene);shardMaterial.diffuseColor=color.clone();shardMaterial.emissiveColor=color.scale(0.8);
+        const cracks=[];
+        for(let i=0;i<8;i++){const a=i*Math.PI/4;const points=[new Vector3(0,radius*0.22,radius*0.91),new Vector3(Math.cos(a)*0.6,radius*0.42,radius*0.72),new Vector3(Math.cos(a)*1.35,radius*0.5,radius*0.46)];const line=MeshBuilder.CreateLines(`${id} barrier crack ${i}`,{points},scene);line.parent=root;line.color=new Color3(0.8,0.95,1);line.isPickable=false;line.setEnabled(false);cracks.push(line);}
+        const beams=[];
+        for(let i=0;i<12;i++){const a=i*Math.PI/6;const beam=MeshBuilder.CreateCylinder(`${id} blue boundary beam`,{height:radius*1.05,diameter:0.12,tessellation:8},scene);beam.parent=root;beam.position.set(Math.cos(a)*radius,radius*0.52,Math.sin(a)*radius);beam.material=shellMaterial;beam.isPickable=false;beams.push(beam);}
+        const field={id,antiMagic,root,shell,ring,shellMaterial,cracks,beams,shardMaterial,shards:[],maxHp,hp:maxHp,radius,duration,timeLeft:duration,broken:false};
+        activeBarriers.push(field);
+        showToast(antiMagic?'Anti-Magic Barrier rises! Enemy magic is suppressed while it holds.':'Barrier rises! Stay inside the blue field.',4);
+        updateHUD();
+    });
     updateHUD();
 }
 
@@ -2073,6 +2163,10 @@ function updateBarrierFields(dt) {
 }
 
 function triggerBossSpecial(enemy) {
+    if (activeBarriers.some(field=>field.antiMagic&&!field.broken&&field.timeLeft>0&&distance(player.root.position,field.root.getAbsolutePosition())<=field.radius+0.5)) {
+        showToast('Anti-Magic Barrier suppresses the boss spell!',2.2);
+        return;
+    }
     const regionId=enemy.regionId||'forest';
     const region=REGION_DATA[regionId];
     if(!region)return;
@@ -2110,15 +2204,15 @@ function triggerBossSpecial(enemy) {
     if(state.hp<=0)playerDefeated();
 }
 
-function spawnSummonedAlly(owner, hp=50) {
+function spawnSummonedAlly(owner, hp=50, summonType='passive', lifeTimer=240) {
     const root=new TransformNode('summoned ether guardian',scene);
     const material=new StandardMaterial('summoned guardian glow',scene);
     material.diffuseColor=new Color3(0.25,0.75,0.56);material.emissiveColor=new Color3(0.06,0.32,0.22);material.alpha=0.9;
     const body=MeshBuilder.CreateCapsule('summoned guardian body',{height:1.45,radius:0.4,tessellation:12},scene);body.parent=root;body.position.y=0.95;body.material=material;
     const core=MeshBuilder.CreateSphere('summoned guardian core',{diameter:0.42,segments:10},scene);core.parent=root;core.position.y=1.55;core.material=materials.mireGlow;glowLayer.addIncludedOnlyMesh(core);
-    const ownerRoot=owner?.model?.root||player.root;
+    const ownerRoot=owner?.model?.root||owner?.root||player.root;
     root.position.copyFrom(ownerRoot.position.add(new Vector3((Math.random()-.5)*2,0,(Math.random()-.5)*2)));
-    const summon={root,body,hp,maxHp:hp,attackTimer:0.6,ownerId:owner?.id||'player',owner,material,lifeTimer:240};
+    const summon={root,body,hp,maxHp:hp,attackTimer:0.6,ownerId:owner?.id||'player',owner,material,lifeTimer,summonType};
     summonedAllies.push(summon);return summon;
 }
 
@@ -2129,23 +2223,58 @@ function updateSummonedAllies(dt) {
         ally.lifeTimer-=dt;ally.attackTimer=Math.max(0,ally.attackTimer-dt);
         const target=nearestEnemyFrom(ally.root.position,24);
         if(target){const d=distance(ally.root.position,target.root.position);if(d>2.4)moveToward(ally.root,target.root.position,3.7,dt);else if(ally.attackTimer<=0){dealDamage(target,16+state.level+(ally.owner?.upgradeLevel||0)*2,ally.root);ally.attackTimer=1.8;}}
-        else if(ally.owner?.model?.root){const d=distance(ally.root.position,ally.owner.model.root.position);if(d>9)moveToward(ally.root,ally.owner.model.root.position,3.2,dt);}
+        else {const ownerRoot=ally.owner?.model?.root||ally.owner?.root;if(ownerRoot){const d=distance(ally.root.position,ownerRoot.position);if(d>9)moveToward(ally.root,ownerRoot.position,3.2,dt);}}
     }
 }
+function updatePlayerSummoner(dt) {
+    if (!isAbilityUnlocked('summoner')) return;
+    state.summonTimer = Math.max(0, (state.summonTimer ?? 20) - dt);
+    const active = summonedAllies.filter(a => a.ownerId === 'player' && a.summonType === 'passive' && a.hp > 0).length;
+    if (state.summonTimer <= 0) {
+        if (active < 5) {
+            spawnSummonedAlly({id:'player',root:player.root},50,'passive',240);
+            showToast(`A 50-HP Ether spirit joins you. (${active+1}/5)`,3);
+        }
+        state.summonTimer=20;
+        void saveGame(true);
+    }
+}
+function castSummonerSpecial() {
+    const cost=65;
+    if(state.mana<cost){showToast(`Summoner requires ${cost} MP.`);return;}
+    if(state.abilityCooldowns.summoner>0){showToast('Summoner is recharging.');return;}
+    state.mana-=cost;state.abilityCooldowns.summoner=15;animateCharacterAttack(player);
+    const colour=new Color3(0.28,1,0.66);
+    const pos=player.root.position.clone();
+        drawMagicGlyph(pos.add(new Vector3(0,0.065,0)),colour,{floor:true,size:3.25,duration:1250},()=>{
+        for(let i=0;i<4;i++){
+            const a=i*Math.PI/2+Math.PI/4;
+            const ally=spawnSummonedAlly({id:'player',root:player.root},50,'special',24);
+            ally.root.position.copyFrom(player.root.position.add(new Vector3(Math.cos(a)*2.4,0,Math.sin(a)*2.4)));
+        }
+        let hits=0;
+        for(const enemy of enemies){if(enemy.dead)continue;if(distance(enemy.root.position,player.root.position)<=9){dealDamage(enemy,88+(state.abilityLevels.summoner-1)*14,player.root);hits++;}}
+        showToast(`Ether summoning! Four allies arrive; ${hits} enemies struck by the summoning burst.`,4);
+        updateHUD();
+    });
+}
+
 function getRequiredKills(regionId) { return REGION_DATA[regionId]?.requiredKills || 8; }
 function isAbilityUnlocked(id) {
-    if (id === 'barrier') return !!state.regionProgress.emberfall?.rescued;
-    if (id === 'antiMagic') return !!state.regionProgress.frostveil?.rescued;
-    if (id === 'deathBeam') return !!state.regionProgress.starfall?.rescued;
+    if (id === 'barrier') return !!(state.regionProgress.emberfall?.shardClaimed || state.regionProgress.emberfall?.rescued);
+    if (id === 'antiMagic') return !!(state.regionProgress.frostveil?.shardClaimed || state.regionProgress.frostveil?.rescued);
+    if (id === 'deathBeam') return !!(state.regionProgress.starfall?.shardClaimed || state.regionProgress.starfall?.rescued);
+    if (id === 'summoner') return !!(state.regionProgress.mire?.shardClaimed || state.regionProgress.mire?.rescued);
     return ['arcane','heal','nova'].includes(id);
 }
+
 function spawnRegionBoss(regionId) {
     const region = REGION_DATA[regionId];
     const progress = state.regionProgress[regionId];
     if (!region || !progress || progress.bossUnlocked || progress.bossDefeated || progress.kills < getRequiredKills(regionId) || progress.elapsed < 60) return;
     progress.bossUnlocked = true;
     if (regionId === 'forest') addBoss(); else addRegionalBoss(regionId);
-    setObjective(`Defeat ${region.bossName}`, `${region.name} has been explored and its guardians defeated. The boss is waiting at the end of the trail.`);
+    setObjective(`Defeat ${region.bossName}`, `${region.name} has been explored and its guardians defeated. The boss is waiting at the end of the trail, guarding a Power Shard.`);
     showToast(`${region.bossName} has appeared at the end of the trail!`, 4.5);
     updateHUD();
     void saveGame(true);
@@ -2276,12 +2405,12 @@ function updateQuestProgress() {
     const pct = progress.bossDefeated ? 100 : progress.bossUnlocked ? 84 : progress.kills / required * 68;
     $('quest-progress-bar').style.width = `${pct}%`;
     $('quest-progress-text').textContent = progress.bossDefeated
-        ? `${region.name} cleared · ${companionById[region.companionId].name} rescued`
+        ? `${region.name} cleared · ${region.shardName} acquired`
         : progress.bossUnlocked ? `${region.bossName} is waiting` : `${region.name}: ${progress.kills} / ${required} threats defeated · ${Math.min(60, Math.floor(progress.elapsed || 0))}/60 sec`;
 }
 
 function updateHUD() {
-    const maxHp = 120 + (state.level - 1) * 14;
+    const maxHp = getMaxHP();
     const maxMana = getMaxMana();
     $('hero-name').textContent = playerName.toUpperCase();
     $('hero-class').textContent = playerClass.toUpperCase();
@@ -2299,6 +2428,8 @@ function updateHUD() {
     $('inventory-tokens').textContent = String(state.tokens);
     $('weapon-level').textContent = `Level ${state.weaponLevel}`;
     $('weapon-name').textContent = state.weaponLevel > 1 ? `Ether-forged blade +${state.weaponLevel - 1}` : 'Forest-forged blade';
+    const weaponUpgradeButton=document.getElementById('upgrade-weapon-button');
+    if(weaponUpgradeButton)weaponUpgradeButton.textContent=`Upgrade weapon · Next cost: ${75*state.weaponLevel} gold`;
     $('armour-name').textContent = `Wayfarer ${state.level >= 3 ? 'reinforced ' : ''}leathers`;
     const partyList = $('party-list');
     partyList.innerHTML = '';
@@ -2312,7 +2443,7 @@ function updateHUD() {
         member.innerHTML = `<div class="party-avatar">${c.name.charAt(0)}</div><div><b>${c.name}</b><small>${c.role}${c.recovering ? ' · recovering' : ''}</small></div><div class="party-health"><i style="width:${pct}%"></i></div>`;
         partyList.appendChild(member);
     }
-    $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : state.defaultAbility === 'nova' ? 'FROST NOVA' : state.defaultAbility === 'barrier' ? 'BARRIER' : state.defaultAbility === 'antiMagic' ? 'ANTI-MAGIC BARRIER' : 'DEATH BEAM'}`;
+    $('default-ability-button').textContent = `DEFAULT: ${state.defaultAbility === 'arcane' ? 'ARCANE BOLT' : state.defaultAbility === 'heal' ? 'HEALING WAVE' : state.defaultAbility === 'nova' ? 'FROST NOVA' : state.defaultAbility === 'barrier' ? 'BARRIER' : state.defaultAbility === 'antiMagic' ? 'ANTI-MAGIC BARRIER' : state.defaultAbility === 'summoner' ? 'SUMMONER' : 'DEATH BEAM'}`;
     document.querySelectorAll('[data-ability]').forEach(button => { button.classList.toggle('hidden', !isAbilityUnlocked(button.dataset.ability)); button.disabled = !isAbilityUnlocked(button.dataset.ability); });
     const target = currentTarget && !currentTarget.dead ? currentTarget : nearestEnemy(18);
     const enemyCard = $('enemy-card');
@@ -2348,10 +2479,11 @@ function makeSaveData() {
     for (const c of companions)
         active[c.id] = c.active;
     return {
-        version: 4, worldLayoutVersion: 4, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
+        version: 5, worldLayoutVersion: 4, playerName, playerClass, appearance, level: state.level, xp: state.xp, hp: state.hp, mana: state.mana,
+        powerShards: state.powerShards || 0, healthUpgradeLevel: state.healthUpgradeLevel || 0, summonTimer: state.summonTimer || 20,
         gold: state.gold, crystals: state.crystals, tokens: state.tokens, weaponLevel: state.weaponLevel,
         wolfKills: state.wolfKills, bossDefeated: state.bossDefeated, aureliaRecruited: state.aureliaRecruited,
-        regionProgress: state.regionProgress, abilityLevels: state.abilityLevels, manaUpgradeLevel: state.manaUpgradeLevel, companionUpgradeLevels: state.companionUpgradeLevels, partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
+        regionProgress: state.regionProgress, abilityLevels: state.abilityLevels, manaUpgradeLevel: state.manaUpgradeLevel, healthUpgradeLevel: state.healthUpgradeLevel, powerShards: state.powerShards, summonTimer: state.summonTimer, companionUpgradeLevels: state.companionUpgradeLevels, partyActive: active, formation: state.formation, strategy: state.strategy, command: state.command,
         zone: state.zone, playerX: player.root.position.x, playerZ: player.root.position.z,
         worldMinutes: state.worldMinutes, weatherIndex: state.weatherIndex, collectedCrystalIds: Array.from(state.crystalsCollected)
     };
@@ -2415,13 +2547,17 @@ function applySave(data) {
     appearance = typeof data.appearance === 'string' ? data.appearance : 'emerald';
     state.level = Math.max(1, Number(data.level) || 1);
     state.xp = Math.max(0, Number(data.xp) || 0);
-    state.hp = Math.max(1, Math.min(120 + (state.level - 1) * 14, Number(data.hp) || 120));
+    state.healthUpgradeLevel = Math.max(0, Math.min(10, Number(data.healthUpgradeLevel) || 0));
+    state.hp = Math.max(1, Math.min(getMaxHP(), Number(data.hp) || 120));
     state.mana = Math.max(0, Math.min(getMaxMana(), Number(data.mana) || 80));
     state.gold = Math.max(0, Number(data.gold) || 0);
     state.crystals = Math.max(0, Number(data.crystals) || 0);
     state.tokens = Math.max(0, Number(data.tokens) || 0);
     state.weaponLevel = Math.max(1, Number(data.weaponLevel) || 1);
     state.manaUpgradeLevel = Math.max(0, Math.min(10, Number(data.manaUpgradeLevel) || 0));
+    state.healthUpgradeLevel = Math.max(0, Math.min(10, Number(data.healthUpgradeLevel) || 0));
+    state.powerShards = Math.max(0, Number(data.powerShards) || 0);
+    state.summonTimer = Math.max(0, Number(data.summonTimer) || 20);
     state.mana = Math.max(0, Math.min(getMaxMana(), Number(data.mana) || 80));
     state.abilityLevels = { ...state.abilityLevels, ...(data.abilityLevels || {}) };
     for (const key of Object.keys(state.abilityLevels)) state.abilityLevels[key] = Math.max(1, Math.min(10, Number(state.abilityLevels[key]) || 1));
@@ -2437,8 +2573,9 @@ function applySave(data) {
                 dungeonCleared: !!saved.dungeonCleared,
                 bossUnlocked: !!saved.bossUnlocked,
                 bossDefeated: !!saved.bossDefeated,
-                // A saved recruit flag is never accepted unless that region's boss was beaten.
-                rescued: !!saved.rescued && !!saved.bossDefeated
+                // Older rescued flags migrate into the new shard reward system.
+                rescued: (!!saved.rescued || !!saved.shardClaimed) && !!saved.bossDefeated,
+                shardClaimed: (!!saved.shardClaimed || !!saved.rescued) && !!saved.bossDefeated
             };
         }
     }
@@ -2448,9 +2585,14 @@ function applySave(data) {
     state.regionProgress.forest.bossDefeated = state.regionProgress.forest.bossDefeated || !!data.bossDefeated;
     state.regionProgress.forest.bossUnlocked = state.regionProgress.forest.bossUnlocked || state.regionProgress.forest.kills >= getRequiredKills('forest') || state.regionProgress.forest.bossDefeated;
     state.regionProgress.forest.rescued = state.regionProgress.forest.rescued || (Number(data.version || 0) < 3 && state.regionProgress.forest.bossDefeated);
+    state.regionProgress.forest.shardClaimed = state.regionProgress.forest.shardClaimed || state.regionProgress.forest.rescued;
+    state.powerShards = Math.max(state.powerShards || 0, Object.values(state.regionProgress).filter(p => p.shardClaimed).length);
     state.bossDefeated = state.regionProgress.forest.bossDefeated;
     state.bossUnlocked = state.regionProgress.forest.bossUnlocked;
-    state.aureliaRecruited = state.regionProgress.forest.rescued;
+    state.aureliaRecruited = false;
+    state.powerShards = Math.max(0, Number(data.powerShards) || Object.values(state.regionProgress).filter(p => p.shardClaimed || p.rescued).length);
+    state.healthUpgradeLevel = Math.max(0, Math.min(10, Number(data.healthUpgradeLevel) || 0));
+    state.summonTimer = Math.max(0, Number(data.summonTimer) || 20);
     state.formation = data.formation || 'balanced';
     state.strategy = data.strategy || 'protect';
     state.command = data.command || 'follow';
@@ -2466,21 +2608,15 @@ function applySave(data) {
         item.mesh.setEnabled(!collected);
     });
     for (const c of companions) {
-        const region = Object.values(REGION_DATA).find(r => r.companionId === c.id);
-        c.recruited = region ? !!state.regionProgress[region.id].rescued : (c.id === 'reaphel' || c.id === 'sylva');
+        c.recruited = true;
         c.upgradeLevel = Math.max(0, Math.min(10, Number(state.companionUpgradeLevels[c.id]) || 0));
-        c.maxHp = c._baseMaxHp || c.maxHp;
-        c.maxHp += c.upgradeLevel * 20;
-        c.hp = Math.min(c.maxHp, c.hp);
-        c.active = c.recruited && (data.partyActive ? !!data.partyActive[c.id] : c.id === 'reaphel' || c.id === 'sylva');
+        c.maxHp = (c._baseMaxHp || c.maxHp) + c.upgradeLevel * 20;
+        c.hp = Math.min(c.maxHp, Number(data.companionHP?.[c.id]) || c.maxHp);
+        c.active = data.partyActive ? !!data.partyActive[c.id] : true;
     }
-    // A legacy save may have unlocked Aurelia before the boss requirement existed.
-    if (!state.regionProgress.forest.bossDefeated) {
-        state.aureliaRecruited = false;
-        companions[2].recruited = false;
-        companions[2].active = false;
-        state.regionProgress.forest.rescued = false;
-    }
+    // Old regional recruits are now represented by Power Shards, never by new party members.
+    state.aureliaRecruited = false;
+    for (const c of companions) c.recruited = true;
     let savedX = Number(data.playerX);
     let savedZ = Number(data.playerZ);
     if (!Number.isFinite(savedX)) savedX = state.zone === 'base' ? 80 : REGION_DATA[state.zone]?.center.x ?? 80;
@@ -2501,7 +2637,7 @@ function applySave(data) {
         const loadedRegion = REGION_DATA[state.zone];
         const loadedProgress = state.regionProgress[state.zone];
         if (loadedProgress.bossDefeated) {
-            setObjective(`Explore ${loadedRegion.name}`, `The ${loadedRegion.bossName} has been defeated. Its rescued companion is available at the planning table.`);
+            setObjective(`Explore ${loadedRegion.name}`, `The ${loadedRegion.bossName} has been defeated. Its Power Shard is available at the planning table.`);
         } else if (loadedProgress.bossUnlocked) {
             setObjective(`Defeat ${loadedRegion.bossName}`, `The ${loadedRegion.bossName} guards a crystal prison behind its lair.`);
         } else {
@@ -2516,10 +2652,9 @@ function applySave(data) {
     enemies = [];
     spawnedRegions.clear();
     currentTarget = null;
-    for (const id of Object.keys(REGION_DATA)) {
-        const progress = state.regionProgress[id];
-        if (!progress.bossDefeated) ensureRegionEncounter(id, true);
-    }
+    // Spawn only the current area. Distant regions remain dormant until entered.
+    const spawnRegion = state.zone === 'base' ? 'forest' : state.zone;
+    if (spawnRegion && REGION_DATA[spawnRegion]) ensureRegionEncounter(spawnRegion, true);
     $('weather-label').textContent = weatherNames[state.weatherIndex % weatherNames.length];
     $('weather-overlay').className = `weather-overlay ${state.weatherIndex === 1 ? 'rain' : state.weatherIndex === 2 ? 'mist' : ''}`;
     updateHUD();
@@ -2539,12 +2674,9 @@ function positionCompanions() {
         const offset = formationOffset(index);
         c.model.root.position.set(player.root.position.x + offset.x, 0, player.root.position.z + offset.z);
     });
-    for (const c of companions) {
-        const region = Object.values(REGION_DATA).find(r => r.companionId === c.id);
-        const isPrisoner = !!region && !state.regionProgress[region.id].rescued;
-        c.model.root.setEnabled(isPrisoner || (c.active && c.recruited && !c.recovering));
-    }
+    for (const c of companions) c.model.root.setEnabled(c.active && c.recruited && !c.recovering);
 }
+
 function exportSave() {
     const data = makeSaveData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2564,7 +2696,7 @@ function gainXP(amount) {
     while (state.xp >= state.level * 100) {
         state.xp -= state.level * 100;
         state.level++;
-        state.hp = 120 + (state.level - 1) * 14;
+        state.hp = getMaxHP();
         state.mana = getMaxMana();
         showToast(`Level ${state.level}! Your health, mana and combat stats increased.`, 4);
     }
@@ -2634,7 +2766,7 @@ function defeatEnemy(enemy) {
         state.tokens += 1;
         gainXP(region.rewardXP);
         state.combatTimer = 0;
-        setObjective(`${region.bossName} defeated`, `A crystal prison behind the boss contains ${companionById[region.companionId].name}.`);
+        setObjective(`${region.bossName} defeated`, `A Power Shard is sealed in the crystal behind the boss.`);
         updateHUD();
         void saveGame(true);
         beginRescueCutscene(regionId);
@@ -2760,9 +2892,10 @@ function spawnArrowProjectile(from, target, damage, color = materials.gold, spee
 
 function castAbility(id) {
     if (!state.started || state.paused) return;
-    if (!isAbilityUnlocked(id)) { showToast('Defeat the region boss and rescue its prisoner to unlock this ability.'); return; }
+    if (!isAbilityUnlocked(id)) { showToast('Defeat the region boss and claim its Power Shard to unlock this ability.'); return; }
     if (state.abilityCooldowns[id] > 0) { showToast('That ability is still recharging.',1.2); return; }
     if (id === 'barrier' || id === 'antiMagic') { createProtectionField(id === 'antiMagic'); return; }
+    if (id === 'summoner') { castSummonerSpecial(); return; }
     if (id === 'deathBeam') {
         const cost=70;if(state.mana<cost){showToast(`Death Beam requires ${cost} MP.`);return;}
         state.mana-=cost;state.abilityCooldowns.deathBeam=18;animateCharacterAttack(player);
@@ -2804,7 +2937,7 @@ function castAbility(id) {
     }else if(id==='heal'){
         state.abilityCooldowns.heal=8;
         const heal=36+(level-1)*8;
-        state.hp=Math.min(120+(state.level-1)*14,state.hp+heal);playHealingEffect(player.root);
+        state.hp=Math.min(getMaxHP(),state.hp+heal);playHealingEffect(player.root);
         for(const c of activeCompanions()){c.hp=Math.min(c.maxHp,c.hp+heal);playHealingEffect(c.model.root);}
         showToast('Healing Wave restores health to your party.');
     }else{
@@ -2876,14 +3009,23 @@ function companionAttack(companion, enemy) {
 function issueCommand(command) {
     state.command = command;
     for (const companion of companions) companion.command = null;
-    if (command === 'attack')
-        currentTarget = nearestEnemy(30);
-    if (command === 'hold')
-        for (const c of activeCompanions())
-            c.model.root.metadata = { ...(c.model.root.metadata || {}), holdX: c.model.root.position.x, holdZ: c.model.root.position.z };
-    showToast(`Party command: ${command === 'follow' ? 'Follow me' : command === 'attack' ? 'Attack nearest enemy' : command === 'hold' ? 'Hold position' : command === 'defend' ? 'Defend the hero' : 'Advance'}.`);
+    if (command === 'attack') currentTarget = nearestEnemy(30);
+    if (command === 'hold') {
+        state.advanceAnchor = null; state.advanceRegionId = null;
+        for (const c of activeCompanions()) c.model.root.metadata = { ...(c.model.root.metadata || {}), holdX:c.model.root.position.x, holdZ:c.model.root.position.z };
+    } else if (command === 'advance') {
+        const currentIndex = Math.max(0, REGION_ORDER.indexOf(state.zone === 'base' ? 'forest' : state.zone));
+        const currentId = REGION_ORDER[currentIndex];
+        const progress = state.regionProgress[currentId];
+        state.advanceRegionId = progress?.shardClaimed && REGION_ORDER[currentIndex+1] ? REGION_ORDER[currentIndex+1] : currentId;
+        state.advanceAnchor = player.root.position.clone();
+        const destination = REGION_DATA[state.advanceRegionId]?.bossPosition;
+        if (destination) { const dir=destination.subtract(REGION_DATA[state.advanceRegionId].entryPosition); dir.y=0; if(dir.lengthSquared()>0)dir.normalize(); state.advanceGoal=destination.subtract(dir.scale(9)); }
+    } else { state.advanceAnchor=null; state.advanceRegionId=null; state.advanceGoal=null; }
+    showToast(`Party command: ${command === 'follow' ? 'Follow me' : command === 'attack' ? 'Attack nearest enemy' : command === 'hold' ? 'Hold position' : command === 'defend' ? 'Defend the hero' : 'Advance independently'}.`);
     $('command-overlay').classList.add('hidden');
 }
+
 function findCompanionFromPick(mesh) {
     let node = mesh;
     while (node) {
@@ -2943,7 +3085,7 @@ function useCompanionAbility() {
     }
     animateCharacterAttack(c.model);
     if (c.role === 'Healer') {
-        const candidates = [{ hp: state.hp, maxHp: 120 + (state.level - 1) * 14, root: player.root, player: true }, ...companions.filter(x => x.recruited && !x.recovering).map(x => ({ hp: x.hp, maxHp: x.maxHp, root: x.model.root, companion: x }))];
+        const candidates = [{ hp: state.hp, maxHp: getMaxHP(), root: player.root, player: true }, ...companions.filter(x => x.recruited && !x.recovering).map(x => ({ hp: x.hp, maxHp: x.maxHp, root: x.model.root, companion: x }))];
         candidates.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
         const target = candidates[0];
         if (target.player) state.hp = Math.min(target.maxHp, state.hp + 42);
@@ -3042,7 +3184,7 @@ function updateZoneFromPosition() {
         const nextRegionIndex = REGION_ORDER.indexOf(nextZone);
         const previousRegion = REGION_DATA[REGION_ORDER[Math.max(0, nextRegionIndex - 1)]];
         player.root.position.copyFrom(previousRegion?.bossPosition || new Vector3(80, 0, 48));
-        showToast(`The way to ${REGION_DATA[nextZone].name} is sealed. Rescue the previous region's prisoner first.`, 4);
+        showToast(`The way to ${REGION_DATA[nextZone].name} is sealed. Claim the previous region's Power Shard first.`, 4);
         return;
     }
     if (nextZone !== state.zone) {
@@ -3050,23 +3192,25 @@ function updateZoneFromPosition() {
         updateZoneVisuals();
         if (nextZone !== 'base') {
             ensureRegionEncounter(nextZone);
+            updateRegionSceneVisibility();
             const region = REGION_DATA[nextZone];
             const progress = state.regionProgress[nextZone];
-            if (progress.bossDefeated) setObjective(`Explore ${region.name}`, `The ${region.bossName} has been defeated. Its rescued companion is available at the planning table.`);
-            else if (progress.bossUnlocked) setObjective(`Defeat ${region.bossName}`, `The boss is guarding a crystal prison behind its lair.`);
+            if (progress.bossDefeated) setObjective(`Explore ${region.name}`, `The ${region.bossName} has been defeated. Its Power Shard has opened the next region.`);
+            else if (progress.bossUnlocked) setObjective(`Defeat ${region.bossName}`, `The boss guards a Power Shard sealed behind its lair.`);
             else setObjective(`Explore ${region.name}`, `Defeat three ${region.enemyName} to reveal the region boss.`);
         } else {
             setObjective('Headquarters', 'Visit the planning table, hospital or blacksmith, then choose your next expedition.');
         }
         showToast(nextZone === 'base' ? 'You have arrived at headquarters.' : `You have entered ${REGION_DATA[nextZone].name}.`);
         updateHUD();
+        updateWorldMapNodes();
     }
 }
 function setZone(zone) {
     if (state.dungeonState && zone !== state.zone) exitDungeon();
     if (zone !== 'base' && !REGION_DATA[zone]) zone = 'base';
     if (zone !== 'base' && !isRegionUnlocked(zone)) {
-        showToast(`That region is still sealed. Free the prisoner in the previous region first.`, 3.5);
+        showToast(`That region is still sealed. Claim the previous region's Power Shard first.`, 3.5);
         return;
     }
     state.zone = zone;
@@ -3080,6 +3224,7 @@ function setZone(zone) {
         const entry = region.entryPosition.clone();
         player.root.position.copyFrom(entry);
         ensureRegionEncounter(zone);
+        updateRegionSceneVisibility();
         positionCompanions();
         const progress = state.regionProgress[zone];
         setObjective(progress.bossDefeated ? `Explore ${region.name}` : progress.bossUnlocked ? `Defeat ${region.bossName}` : `Explore ${region.name}`, progress.bossDefeated ? 'The area has been cleared. Continue exploring and look for the road to the next region.' : `Defeat three ${region.enemyName} to draw out ${region.bossName}.`);
@@ -3089,7 +3234,32 @@ function setZone(zone) {
     updateHUD();
 }
 
+function updateRegionSceneVisibility() {
+    const currentIndex = REGION_ORDER.indexOf(state.zone);
+    for (const [id, bundle] of Object.entries(regionVisuals)) {
+        const index = REGION_ORDER.indexOf(id);
+        const active = state.zone === 'base' ? id === 'forest' : Math.abs(index - currentIndex) <= 1;
+        for (const mesh of bundle.meshes || []) if (mesh && !mesh.isDisposed()) mesh.setEnabled(active);
+        for (const node of bundle.transforms || []) if (node && !node.isDisposed()) node.setEnabled(active);
+        for (const light of bundle.lights || []) if (light && !light.isDisposed()) light.setEnabled(active);
+    }
+    // Dormant encounters are hidden when the player leaves their region.
+    for (const enemy of enemies) {
+        if (enemy.regionId && enemy.root && !enemy.root.isDisposed())
+            enemy.root.setEnabled(enemy.regionId === state.zone);
+    }
+    for (const landmark of dungeonLandmarks) {
+        if (landmark.portal && !landmark.portal.isDisposed())
+            landmark.portal.setEnabled(landmark.regionId === state.zone);
+        const roomIsActive = !!state.dungeonState && state.dungeonState.regionId === landmark.regionId;
+        for (const roomMesh of landmark.roomMeshes || []) {
+            if (roomMesh && !roomMesh.isDisposed()) roomMesh.setEnabled(roomIsActive);
+        }
+    }
+}
+
 function updateZoneVisuals() {
+    updateRegionSceneVisibility();
     if (state.zone === 'base') {
         scene.fogDensity = 0.0045;
         scene.fogColor = new Color3(0.21, 0.29, 0.23);
@@ -3143,28 +3313,14 @@ function ensureCompanionPlanningControls() {
     const section = document.querySelector('#planning-overlay .planning-section');
     if (!section) return;
     const partyNote = section.querySelector('.section-help');
-    if (partyNote) partyNote.textContent = 'Choose any number of rescued companions to join your expedition.';
-    let list = section.querySelector('.extra-companion-options');
-    if (!list) {
-        list = document.createElement('div');
-        list.className = 'extra-companion-options';
-        section.appendChild(list);
-    }
-    list.innerHTML = '';
-    for (const c of companions.slice(3)) {
-        const label = document.createElement('label');
-        label.className = 'check-row';
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.id = `party-${c.id}`;
-        input.checked = c.active;
-        input.disabled = !c.recruited;
-        const span = document.createElement('span');
-        const title = document.createElement('b'); title.textContent = c.name;
-        const subtitle = document.createElement('small'); subtitle.textContent = c.recruited ? `${c.role} · Rescued` : `${c.role} · Trapped in ${Object.values(REGION_DATA).find(r => r.companionId === c.id)?.name || 'a region'}`;
-        span.append(title, subtitle); label.append(input, span); list.appendChild(label);
-    }
+    if (partyNote) partyNote.textContent = 'Choose your starting companions. New regions reward Power Shards instead of additional party members.';
+    // Remove the old healer recruitment checkbox from earlier versions of the planning UI.
+    const legacyAurelia = document.getElementById('party-aurelia');
+    if (legacyAurelia) legacyAurelia.closest('label')?.remove();
+    const list = section.querySelector('.extra-companion-options');
+    if (list) list.remove();
 }
+
 function openPlanning(fromPause) {
     planningFromPaused = fromPause || state.paused;
     state.paused = true;
@@ -3179,24 +3335,14 @@ function openPlanning(fromPause) {
     $('strategy-select').value = state.strategy;
 }
 function applyPlanningSelections() {
-    const chosen = companions.filter(c => {
+    companions.forEach(c => {
         const input = document.getElementById(`party-${c.id}`);
-        return c.recruited && !!input?.checked;
+        c.active = c.recruited && (input ? !!input.checked : true);
     });
-
-    // Apply the configured party limit. Infinity means every rescued companion.
-    const selected = chosen.slice(0, MAX_ACTIVE_COMPANIONS);
-    if (selected.length < chosen.length && Number.isFinite(MAX_ACTIVE_COMPANIONS)) {
-        showToast(`Your expedition can include up to ${MAX_ACTIVE_COMPANIONS} companions.`);
-    }
-
-    const allowed = new Set(selected.map(c => c.id));
-    companions.forEach(c => { c.active = c.recruited && allowed.has(c.id); });
     state.formation = $('formation-select').value;
     state.strategy = $('strategy-select').value;
     if (activeCompanions().length === 0) companions[0].active = true;
-    positionCompanions();
-    updateHUD();
+    positionCompanions(); updateHUD();
 }
 
 function closePlanning() {
@@ -3225,7 +3371,8 @@ function ensureUpgradePanel() {
     return panel;
 }
 function upgradePrice(kind,id='') {
-    if(kind==='mana')return 160*(state.manaUpgradeLevel+1);
+    if(kind==='mana')return 160*((state.manaUpgradeLevel||0)+1);
+    if(kind==='health')return 150*((state.healthUpgradeLevel||0)+1);
     if(kind==='ability')return 125*(state.abilityLevels[id]||1);
     const companion=companionById[id];return companion?110*((companion.upgradeLevel||0)+1):Infinity;
 }
@@ -3233,15 +3380,19 @@ function purchaseUpgrade(kind,id='') {
     let cost=upgradePrice(kind,id);
     if(!Number.isFinite(cost)){showToast('That upgrade is unavailable.');return;}
     if(kind==='mana'&&state.manaUpgradeLevel>=10){showToast('Mana capacity is fully upgraded.');return;}
+    if(kind==='health'&&(state.healthUpgradeLevel||0)>=10){showToast('Maximum health is fully upgraded.');return;}
     if(kind==='ability'&&(state.abilityLevels[id]||1)>=10){showToast('That ability is fully upgraded.');return;}
     const companion=companionById[id];
-    if(kind==='companion'&&(!companion||!companion.recruited)){showToast('Rescue this companion before upgrading them.');return;}
+    if(kind==='companion'&&(!companion||!companion.recruited)){showToast('That companion is not currently available for training.');return;}
     if(kind==='companion'&&(companion.upgradeLevel||0)>=10){showToast(`${companion.name} is fully upgraded.`);return;}
     if(state.gold<cost){showToast(`You need ${cost} gold for this upgrade. You have ${state.gold}.`);return;}
     state.gold-=cost;
     if(kind==='mana'){
         state.manaUpgradeLevel++;state.mana=Math.min(getMaxMana(),state.mana+20);
         showToast(`Mana capacity upgraded to ${getMaxMana()} MP.`);
+    }else if(kind==='health'){
+        state.healthUpgradeLevel=(state.healthUpgradeLevel||0)+1;state.hp=Math.min(getMaxHP(),state.hp+20);
+        showToast(`Maximum health upgraded to ${getMaxHP()} HP.`);
     }else if(kind==='ability'){
         state.abilityLevels[id]=(state.abilityLevels[id]||1)+1;
         showToast(`${id==='antiMagic'?'Anti-Magic Barrier':id==='deathBeam'?'Death Beam':id[0].toUpperCase()+id.slice(1)} upgraded to level ${state.abilityLevels[id]}.`);
@@ -3262,11 +3413,13 @@ function updateUpgradePanel() {
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid rgba(220,220,205,.12)"><div style="min-width:0"><b>${title}</b><div style="font:12px/1.4 system-ui;color:#b9c9bf">${detail} · Level ${level}/${max}</div></div><button data-upgrade-kind="${kind}" data-upgrade-id="${id}" ${capped||money<cost?'disabled':''} style="min-width:110px;padding:8px 10px;border:1px solid rgba(207,189,128,.45);border-radius:9px;background:${capped?'#39443d':'#283f36'};color:#f2e8c8;cursor:pointer;opacity:${capped||money<cost?'.55':'1'}">${capped?'MAX':`${cost} gold`}</button></div>`;
     };
     const manaLevel=state.manaUpgradeLevel||0;
-    let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3 style="margin:0;font:600 16px Georgia,serif">Upgrades & Training</h3><b style="color:#e3c97e">${money} gold</b></div><p style="margin:6px 0 10px;font:12px system-ui;color:#bac9be">Upgrade costs increase automatically with each level. Spend gold to strengthen spells, mana and teammates.</p>`;
+    let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3 style="margin:0;font:600 16px Georgia,serif">Upgrades & Training</h3><b style="color:#e3c97e">${money} gold</b></div><p style="margin:6px 0 10px;font:12px system-ui;color:#bac9be">Upgrade costs increase automatically with each level. Spend gold to strengthen your health, mana, abilities and current party.</p>`;
+    html+=`<div style="padding:8px 0;color:#8fd7bd;font:13px system-ui">Power Shards collected: <b>${state.powerShards||0}</b></div>`;
+    html+=button('health','health','Vitality',`+20 maximum HP · Current ${getMaxHP()} HP`,upgradePrice('health'),state.healthUpgradeLevel||0,10);
     html+=button('mana','mana','Mana Capacity',`+20 maximum MP · Current ${getMaxMana()} MP`,upgradePrice('mana'),manaLevel,10);
-    for(const id of ['arcane','heal','nova','barrier','antiMagic','deathBeam'])if(isAbilityUnlocked(id)){
-        const titles={arcane:'Arcane Bolt',heal:'Healing Wave',nova:'Frost Nova',barrier:'Barrier',antiMagic:'Anti-Magic Barrier',deathBeam:'Death Beam'};
-        const details={arcane:'Stronger projectile',heal:'More healing',nova:'More damage and freeze time',barrier:'More shield HP and duration',antiMagic:'More anti-magic HP and duration',deathBeam:'More beam damage'};
+    for(const id of ['arcane','heal','nova','barrier','antiMagic','deathBeam','summoner'])if(isAbilityUnlocked(id)){
+        const titles={arcane:'Arcane Bolt',heal:'Healing Wave',nova:'Frost Nova',barrier:'Barrier',antiMagic:'Anti-Magic Barrier',deathBeam:'Death Beam',summoner:'Summoner'};
+        const details={arcane:'Stronger projectile',heal:'More healing',nova:'More damage and freeze time',barrier:'More shield HP and duration',antiMagic:'More anti-magic HP and duration',deathBeam:'More beam damage',summoner:'Longer-lived spirit allies and stronger special'};
         const level=state.abilityLevels[id]||1;
         html+=button('ability',id,titles[id],details[id],upgradePrice('ability',id),level,10);
     }
@@ -3294,7 +3447,7 @@ function closeInventory() {
 }
 function sleepUntilMorning() {
     state.worldMinutes = 8 * 60;
-    state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + 60);
+    state.hp = Math.min(getMaxHP(), state.hp + 60);
     state.mana = getMaxMana();
     for (const c of companions)
         if (c.recruited) {
@@ -3307,7 +3460,7 @@ function sleepUntilMorning() {
     void saveGame(true);
 }
 function useHospital() {
-    state.hp = 120 + (state.level - 1) * 14;
+    state.hp = getMaxHP();
     state.mana = getMaxMana();
     for (const c of companions)
         if (c.recruited) {
@@ -3437,7 +3590,7 @@ function startNewGame() {
     state.gold = 100; state.crystals = 0; state.tokens = 0; state.weaponLevel = 1;
     state.wolfKills = 0; state.bossUnlocked = false; state.bossDefeated = false;
     state.questComplete = false; state.aureliaRecruited = false; state.regionProgress = freshRegionProgress();
-    state.abilityLevels = { arcane:1, heal:1, nova:1, barrier:1, antiMagic:1, deathBeam:1 }; state.manaUpgradeLevel = 0; state.companionUpgradeLevels = {}; state.playerFrozenTimer = 0; state.dungeonState = null;
+    state.abilityLevels = { arcane:1, heal:1, nova:1, barrier:1, antiMagic:1, deathBeam:1, summoner:1 }; state.manaUpgradeLevel = 0; state.healthUpgradeLevel = 0; state.powerShards = 0; state.summonTimer = 20; state.advanceAnchor = null; state.advanceGoal = null; state.advanceRegionId = null; state.companionUpgradeLevels = {}; state.playerFrozenTimer = 0; state.dungeonState = null;
     summonedAllies.forEach(a=>{if(a.root&&!a.root.isDisposed())a.root.dispose();if(a.material)a.material.dispose();}); summonedAllies=[];
     activeBarriers.forEach(f=>{
         if(f.root&&!f.root.isDisposed())f.root.dispose();
@@ -3461,11 +3614,13 @@ function startNewGame() {
     });
     companions[0].active = true; companions[1].active = true;
     guardianNPC.root.setEnabled(false); guardianMarker.setEnabled(false);
+    [aureliaModel,darianModel,nyraModel,rowanModel,serenModel].forEach(model=>model.root.setEnabled(false));
     updatePrisonCrystalVisibility();
     $('weather-label').textContent = 'CLEAR'; $('weather-overlay').className = 'weather-overlay';
     currentTarget = null;
     enemies.forEach(e => e.root.dispose()); enemies = []; spawnedRegions.clear();
     projectiles.forEach(p => p.mesh.dispose()); projectiles = [];
+    enemyProjectiles.forEach(p=>{p.mesh.dispose();p.material.dispose();}); enemyProjectiles=[];
     for (const id of Object.keys(REGION_DATA)) if (id !== 'forest') state.regionProgress[id].kills = 0;
     ensureRegionEncounter('forest', true);
     player.root.position.set(80, 0, 73);
@@ -3490,7 +3645,7 @@ async function continueGame() {
     $('start-overlay').classList.add('hidden');
     showToast('Welcome back to Etheria.');
     updateHUD();
-    const pendingRescue = Object.keys(REGION_DATA).find(id => state.regionProgress[id].bossDefeated && !state.regionProgress[id].rescued);
+    const pendingRescue = Object.keys(REGION_DATA).find(id => state.regionProgress[id].bossDefeated && !state.regionProgress[id].shardClaimed);
     if (pendingRescue) beginRescueCutscene(pendingRescue);
 }
 // -----------------------------------------------------------------------------
@@ -3527,6 +3682,49 @@ function updateWorldClock(dt) {
         showToast(`The weather changed: ${weatherNames[state.weatherIndex].toLowerCase()}.`, 2.2);
     }
 }
+function spawnEnemyProjectile(enemy, targetRoot, targetCompanion = null, targetSummon = null) {
+    const material = new StandardMaterial('hostile ranged spell material', scene);
+    const region = REGION_DATA[enemy.regionId] || REGION_DATA.forest;
+    material.diffuseColor = region.crystalMaterial.diffuseColor.clone();
+    material.emissiveColor = region.crystalMaterial.emissiveColor.clone();
+    const orb = MeshBuilder.CreateSphere('enemy ranged magic bolt', { diameter: 0.36, segments: 10 }, scene);
+    orb.material = material; orb.isPickable = false;
+    const from = enemy.root.position.add(new Vector3(0, 1.55, 0));
+    const to = targetRoot.position.add(new Vector3(0, 1.05, 0));
+    orb.position.copyFrom(from);
+    enemyProjectiles.push({ mesh: orb, material, from, to, age: 0, duration: Math.max(0.38, distance(from, to) / 13), targetRoot, targetCompanion, targetSummon, damage: Math.round(enemy.damage * 0.72) });
+}
+function updateEnemyProjectiles(dt) {
+    for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+        const shot = enemyProjectiles[i];
+        if (!shot.targetRoot || shot.targetRoot.isDisposed?.() || shot.targetRoot.isEnabled?.() === false) {
+            shot.mesh.dispose(); shot.material.dispose(); enemyProjectiles.splice(i,1); continue;
+        }
+        shot.age += dt;
+        const t = Math.min(1, shot.age / shot.duration);
+        shot.mesh.position.copyFrom(Vector3.Lerp(shot.from, shot.to, t));
+        shot.mesh.position.y += Math.sin(t * Math.PI) * 0.55;
+        if (t >= 1) {
+            const anti = hasActiveBarrierFor(shot.targetRoot, true);
+            const barrier = hasActiveBarrierFor(shot.targetRoot, false);
+            if (!anti) {
+                if (barrier) {
+                    barrier.hp = Math.max(0, barrier.hp - shot.damage);
+                    updateBarrierCracks(barrier); if (barrier.hp <= 0) breakBarrier(barrier);
+                } else if (shot.targetSummon) {
+                    shot.targetSummon.hp = Math.max(0, shot.targetSummon.hp - shot.damage);
+                } else if (shot.targetCompanion) {
+                    shot.targetCompanion.hp = Math.max(0, shot.targetCompanion.hp - shot.damage);
+                    if (shot.targetCompanion.hp <= 0) { shot.targetCompanion.recovering=true; shot.targetCompanion.recoverTimer=7; shot.targetCompanion.model.root.setEnabled(false); }
+                } else if (shot.targetRoot === player.root) {
+                    state.hp = Math.max(0, state.hp - shot.damage); state.playerDamageFlash=0.22; if(state.hp<=0)playerDefeated();
+                }
+            }
+            shot.mesh.dispose(); shot.material.dispose(); enemyProjectiles.splice(i,1);
+        }
+    }
+}
+
 function updateEnemies(dt) {
     for (const enemy of enemies) {
         if (enemy.dead || !enemy.root.isEnabled()) continue;
@@ -3583,7 +3781,17 @@ function updateEnemies(dt) {
             }
         }
         enemy.root.rotation.y = Math.atan2(targetRoot.position.x - enemy.root.position.x, targetRoot.position.z - enemy.root.position.z);
-        if (d > attackRange) moveToward(enemy.root, targetRoot.position, enemy.speed * (state.worldMinutes / 60 >= 20 ? 1.22 : 1), dt);
+        if (enemy.ranged) {
+            const preferred = enemy.preferredRange || 12;
+            if (d > preferred + 2) moveToward(enemy.root, targetRoot.position, enemy.speed * 0.86, dt);
+            else if (d < preferred - 3) {
+                const away=enemy.root.position.subtract(targetRoot.position); away.y=0; if(away.lengthSquared()<0.01)away.x=1; away.normalize();
+                enemy.root.position.addInPlace(away.scale(enemy.speed*0.72*dt));
+            } else if (enemy.attackTimer <= 0) {
+                if (!hasActiveBarrierFor(targetRoot, true)) spawnEnemyProjectile(enemy,targetRoot,targetCompanion,targetSummon);
+                enemy.attackTimer=2.25;
+            }
+        } else if (d > attackRange) moveToward(enemy.root, targetRoot.position, enemy.speed * (state.worldMinutes / 60 >= 20 ? 1.22 : 1), dt);
         else if (enemy.attackTimer <= 0) {
             const damage = enemy.damage * (state.worldMinutes / 60 >= 20 ? 1.2 : 1);
             const normalBarrier = hasActiveBarrierFor(targetRoot, false);
@@ -3631,6 +3839,10 @@ function updateEnemies(dt) {
 
 function updateCompanions(dt) {
     const selected = activeCompanions();
+    if (state.command === 'advance' && state.advanceAnchor && state.advanceGoal) {
+        const delta=state.advanceGoal.subtract(state.advanceAnchor); delta.y=0;
+        if(delta.length()>0.18){delta.normalize();state.advanceAnchor.addInPlace(delta.scale(Math.min(3.8*dt,distance(state.advanceAnchor,state.advanceGoal))));}
+    }
     selected.forEach((c, index) => {
         const root = c.model.root;
         if (!root.isEnabled() || c.recovering) return;
@@ -3659,8 +3871,8 @@ function updateCompanions(dt) {
                 c.healTimer = 5.5;
                 animateCharacterAttack(c.model);
                 playHealingEffect(injured.model.root);
-            } else if (state.hp < (120 + (state.level - 1) * 14) * 0.72) {
-                state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + 20);
+            } else if (state.hp < (getMaxHP()) * 0.72) {
+                state.hp = Math.min(getMaxHP(), state.hp + 20);
                 c.healTimer = 5.5;
                 animateCharacterAttack(c.model);
                 playHealingEffect(player.root);
@@ -3677,7 +3889,7 @@ function updateCompanions(dt) {
             if (saved?.holdX !== undefined && saved.holdZ !== undefined)
                 desired = new Vector3(saved.holdX, 0, saved.holdZ);
         } else if (companionCommand === 'advance') {
-            desired = player.root.position.add(new Vector3(index % 2 === 0 ? -1 : 1, 0, -3));
+            desired = (state.advanceAnchor || player.root.position).add(formationOffset(index));
         } else if (companionCommand === 'defend') {
             desired = player.root.position.add(new Vector3(index % 2 === 0 ? -1.8 : 1.8, 0, 1.2));
         } else if (companionCommand === 'attack') {
@@ -3841,7 +4053,7 @@ function updateMovement(dt) {
         player.root.position.copyFrom(positionBeforeMove);
         const nextRegion = REGION_DATA[candidateZone];
         if (!state._lastLockedNotice || performance.now() - state._lastLockedNotice > 3500) {
-            showToast(`${nextRegion.name} is sealed. Defeat the previous boss and free its prisoner to continue.`);
+            showToast(`${nextRegion.name} is sealed. Defeat the previous boss and claim its Power Shard to continue.`);
             state._lastLockedNotice = performance.now();
         }
     }
@@ -3863,6 +4075,106 @@ function playerDefeated() {
     updateHUD();
     void saveGame(true);
 }
+
+function ensureGuideAndMapUI() {
+    if (document.getElementById('etheria-world-map-button')) return;
+    const style = document.createElement('style');
+    style.textContent = `
+    #etheria-world-map-overlay,#etheria-guide-overlay{position:fixed;inset:0;z-index:9500;display:none;align-items:center;justify-content:center;background:rgba(3,9,12,.84);backdrop-filter:blur(7px);padding:18px;box-sizing:border-box;color:#f0ead8;font-family:system-ui,sans-serif}
+    .etheria-modal{width:min(920px,96vw);max-height:90vh;overflow:auto;padding:22px;border:1px solid rgba(208,194,146,.35);border-radius:18px;background:linear-gradient(145deg,#162a25,#0d1818);box-shadow:0 24px 80px rgba(0,0,0,.5)}
+    .etheria-modal h2{margin:0 0 7px;font:600 27px Georgia,serif;color:#f4e7bc}.etheria-modal p{color:#c6d2c8;line-height:1.55}
+    .etheria-map-stage{position:relative;width:min(680px,82vw);height:min(680px,68vh);min-height:420px;margin:18px auto 10px;border-radius:50%;background:radial-gradient(circle,#294238 0%,#14241f 49%,#0d1717 70%);border:1px solid rgba(177,205,178,.24);box-shadow:inset 0 0 65px rgba(0,0,0,.42)}
+    .etheria-map-ring{position:absolute;inset:15%;border:1px dashed rgba(217,204,157,.45);border-radius:50%;pointer-events:none}
+    .etheria-map-centre{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:14px 18px;border-radius:14px;text-align:center;background:#273f35;border:1px solid #b99f60;color:#f6e7b9;box-shadow:0 0 28px rgba(213,178,95,.15);font-weight:700}
+    .etheria-map-node{position:absolute;transform:translate(-50%,-50%);width:125px;max-width:25%;min-height:66px;border-radius:13px;border:1px solid rgba(222,208,163,.42);background:#233b32;color:#f2e9cf;cursor:pointer;padding:8px 6px;text-align:center;box-shadow:0 8px 20px rgba(0,0,0,.3);font-size:12px}
+    .etheria-map-node b{display:block;font:600 13px Georgia,serif}.etheria-map-node small{display:block;color:#c8d5c7;margin-top:4px}.etheria-map-node.locked{opacity:.4;filter:grayscale(.7);cursor:not-allowed}.etheria-map-node.cleared{border-color:#9acb92;background:#1c4636}
+    #etheria-guide-overlay .guide-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:14px}.guide-card{border:1px solid rgba(203,205,176,.18);border-radius:12px;padding:13px;background:rgba(255,255,255,.035)}.guide-card h3{margin:0 0 7px;color:#dfcc91;font:600 17px Georgia,serif}.guide-card p,.guide-card li{font-size:13px;line-height:1.5;color:#d0d8cf}.guide-card ul{padding-left:18px;margin:6px 0}
+    .etheria-close{display:block;margin:16px 0 0 auto;padding:9px 17px;border:1px solid rgba(220,199,133,.5);border-radius:9px;background:#31483a;color:#f4e8c7;cursor:pointer}
+    #etheria-world-map-button{margin-left:5px}
+    @media(max-width:560px){.etheria-map-stage{min-height:360px;height:55vh}.etheria-map-node{width:96px;font-size:10px}.etheria-map-node b{font-size:11px}.etheria-map-centre{font-size:11px;padding:10px}}
+    `;
+    document.head.appendChild(style);
+    const topActions = document.querySelector('.top-actions');
+    if (topActions) {
+        const button = document.createElement('button'); button.id='etheria-world-map-button'; button.className='top-button'; button.textContent='World Map';
+        button.addEventListener('click', openWorldMap);
+        const returnButton = document.getElementById('return-base-button');
+        if (returnButton) returnButton.before(button); else topActions.appendChild(button);
+    }
+    const settingsModal = document.querySelector('#settings-overlay .modal');
+    if (settingsModal) {
+        const guideButton = document.createElement('button'); guideButton.id='etheria-open-guide'; guideButton.className='secondary-button'; guideButton.textContent='Game Guide';
+        const actions = settingsModal.querySelector('.modal-actions');
+        if (actions) actions.before(guideButton); else settingsModal.appendChild(guideButton);
+        guideButton.addEventListener('click', openGameGuide);
+    }
+    const map = document.createElement('div'); map.id='etheria-world-map-overlay';
+    map.innerHTML = `<div class="etheria-modal"><h2>World Map</h2><p>Headquarters stands at the centre of the known routes. Each region remains sealed until the previous region's Power Shard is claimed.</p><div class="etheria-map-stage"><div class="etheria-map-ring"></div><div class="etheria-map-centre">✦<br>HEADQUARTERS<br><small>Camp</small></div><div id="etheria-map-nodes"></div></div><button class="etheria-close" id="etheria-map-close">Close Map</button></div>`;
+    document.body.appendChild(map);
+    map.addEventListener('click',event=>{if(event.target===map)closeWorldMap();});
+    map.querySelector('#etheria-map-close').addEventListener('click',closeWorldMap);
+    const guide = document.createElement('div'); guide.id='etheria-guide-overlay';
+    guide.innerHTML = `<div class="etheria-modal"><h2>Legends of Etheria — Guide</h2><p>A field guide to controls, party roles, abilities, progression and exploration.</p><div id="etheria-guide-content" class="guide-grid"></div><button class="etheria-close" id="etheria-guide-close">Close Guide</button></div>`;
+    document.body.appendChild(guide);
+    guide.addEventListener('click',event=>{if(event.target===guide)closeGameGuide();});
+    guide.querySelector('#etheria-guide-close').addEventListener('click',closeGameGuide);
+    window.addEventListener('keydown',event=>{
+        if(event.code==='Escape'&&map.style.display==='flex'){event.preventDefault();closeWorldMap();}
+        else if(event.code==='Escape'&&guide.style.display==='flex'){event.preventDefault();closeGameGuide();}
+    },true);
+}
+let worldMapWasPaused = false;
+let guideWasPaused = true;
+function updateWorldMapNodes() {
+    const host=document.getElementById('etheria-map-nodes'); if(!host)return;
+    const positions={forest:[50,12],emberfall:[82,31],frostveil:[82,70],starfall:[50,88],mire:[18,50]};
+    host.innerHTML='';
+    REGION_ORDER.forEach((id,index)=>{
+        const region=REGION_DATA[id], progress=state.regionProgress[id]||{};
+        const unlocked=isRegionUnlocked(id), cleared=!!(progress.shardClaimed||progress.rescued);
+        const [left,top]=positions[id];
+        const button=document.createElement('button');button.className=`etheria-map-node${!unlocked?' locked':''}${cleared?' cleared':''}`;
+        button.style.left=`${left}%`;button.style.top=`${top}%`;
+        button.disabled=!unlocked;
+        button.innerHTML=`<b>${index+1}. ${region.name}</b><small>${cleared?'Power Shard claimed':unlocked?'Available':'Locked'}</small>`;
+        button.title=unlocked?`Travel to ${region.name}`:'Claim the previous region Power Shard to unlock this route';
+        button.addEventListener('click',()=>{if(!unlocked)return;closeWorldMap(true);setZone(id);updateWorldMapNodes();});
+        host.appendChild(button);
+    });
+}
+function openWorldMap() {
+    if(!state.started)return;
+    worldMapWasPaused=state.paused;
+    state.paused=true;
+    $('pause-overlay').classList.add('hidden');
+    updateWorldMapNodes();
+    document.getElementById('etheria-world-map-overlay').style.display='flex';
+}
+function closeWorldMap(travel=false) {
+    const map=document.getElementById('etheria-world-map-overlay');if(!map)return;
+    map.style.display='none';
+    if(!travel) state.paused=worldMapWasPaused;
+    else state.paused=false;
+}
+function openGameGuide() {
+    guideWasPaused=state.paused;
+    const content=document.getElementById('etheria-guide-content');if(!content)return;
+    const unlocked=['arcane','heal','nova','barrier','antiMagic','deathBeam','summoner'].filter(isAbilityUnlocked);
+    const abilityNames={arcane:'Arcane Bolt — 12 MP; launches a focused magic projectile (key 1).',heal:'Healing Wave — 18 MP; heals the hero and active companions (key Q).',nova:'Frost Nova — 24 MP; draws a ground rune and freezes the selected enemy (key 2).',barrier:'Barrier — 58 MP; a 10-unit blue shield that follows you (key 3).',antiMagic:'Anti-Magic Barrier — 88 MP; 15-unit radius, suppresses enemy magic (key 4).',deathBeam:'Death Beam — 70 MP; a red area beam in front of you, preceded by a rear glyph (key 5).',summoner:'Summoner — 65 MP; adds one 50-HP spirit every 20 seconds (key 6); its special calls four spirits and deals area damage.'};
+    const card=(title,body)=>`<section class="guide-card"><h3>${title}</h3>${body}</section>`;
+    content.innerHTML=[
+        card('Your Goal','<p>Explore the connected regions, defeat each region boss, and claim the Power Shard sealed behind it. A claimed shard opens the next route. The known regions are only the beginning; the story is not finished at the Sunken Mire.</p>'),
+        card('Controls','<ul><li><b>W A S D</b> — move relative to the camera</li><li><b>Mouse drag</b> — look around; wheel — zoom</li><li><b>Space</b> — basic attack</li><li><b>Left click</b> — cast your selected default ability</li><li><b>1, Q, 2–6</b> — cast unlocked abilities</li><li><b>E</b> — interact</li><li><b>F / T / H / G / V</b> — Follow / Attack / Hold / Defend / Advance</li><li><b>Tab</b> — cycle enemy target; <b>Esc</b> — pause</li></ul>'),
+        card('Your Party','<p><b>Reaphel — Knight:</b> frontline melee defender who draws enemy attention and blocks.</p><p><b>Sylva — Archer:</b> ranged damage dealer who attacks from a distance.</p><p>Choose their active status and formation at the planning table. Power Shards no longer unlock additional teammates.</p>'),
+        card('Abilities',`<ul>${unlocked.map(id=>`<li>${abilityNames[id]}</li>`).join('')}</ul><p>Locked abilities appear after claiming their region's Power Shard.</p>`),
+        card('Power Shards & Regions','<p><b>Emerald Forest:</b> Wildwood Shard. <b>Emberfall:</b> Barrier. <b>Frostveil:</b> Anti-Magic Barrier. <b>Starfall:</b> Death Beam. <b>Sunken Mire:</b> Summoner.</p><p>Defeat the required enemies, find ambushes and dungeons, defeat the boss, then claim the shard. Use the World Map to see which routes are open.</p>'),
+        card('Upgrades','<p>Visit Inventory & Equipment to upgrade health, mana, abilities, weapon and companions. Costs show the next purchase price and update after each purchase. Gold is earned by defeating enemies and discovering caches.</p>'),
+        card('Combat Tips','<p>Enemies notice attacks and pursue the character who hit them. Ranged enemies appear from Emberfall onward. Blue barriers can block incoming attacks; hostile creatures can damage and eventually break them. Anti-Magic Barrier suppresses enemy magic while it remains active.</p>')
+    ].join('');
+    document.getElementById('etheria-guide-overlay').style.display='flex';
+}
+function closeGameGuide(){const guide=document.getElementById('etheria-guide-overlay');if(guide)guide.style.display='none';state.paused=guideWasPaused;}
+
 // -----------------------------------------------------------------------------
 // UI and input wiring.
 // -----------------------------------------------------------------------------
@@ -3871,7 +4183,8 @@ function ensureUnlockedAbilityButtons() {
     const specs=[
         {id:'barrier',key:'3',name:'Barrier',mp:'58 MP'},
         {id:'antiMagic',key:'4',name:'Anti-Magic Barrier',mp:'88 MP'},
-        {id:'deathBeam',key:'5',name:'Death Beam',mp:'70 MP'}
+        {id:'deathBeam',key:'5',name:'Death Beam',mp:'70 MP'},
+        {id:'summoner',key:'6',name:'Summoner',mp:'65 MP'}
     ];
     for(const spec of specs){
         if(bar.querySelector(`[data-ability="${spec.id}"]`))continue;
@@ -3927,7 +4240,7 @@ for (const button of Array.from(document.querySelectorAll('[data-ability]'))) {
     button.addEventListener('click', () => castAbility(button.dataset.ability));
 }
 $('default-ability-button').addEventListener('click', () => {
-    const ids = ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam'].filter(isAbilityUnlocked);
+    const ids = ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam', 'summoner'].filter(isAbilityUnlocked);
     const current = ids.indexOf(state.defaultAbility);
     state.defaultAbility = ids[(current + 1) % ids.length];
     updateHUD();
@@ -3956,7 +4269,7 @@ $('import-save-input').addEventListener('change', event => {
     reader.onload = () => {
         try {
             const data = JSON.parse(String(reader.result));
-            if (![2, 3, 4].includes(data.version))
+            if (![2, 3, 4, 5].includes(data.version))
                 throw new Error('Unsupported save version');
             applySave(data);
             void saveGame(true);
@@ -4029,6 +4342,7 @@ window.addEventListener('keydown', event => {
         if (event.code === 'Digit3') castAbility('barrier');
         if (event.code === 'Digit4') castAbility('antiMagic');
         if (event.code === 'Digit5') castAbility('deathBeam');
+        if (event.code === 'Digit6') castAbility('summoner');
         if (event.code === 'Tab') {
             const targets = enemies.filter(enemy => !enemy.dead && enemy.root.isEnabled());
             if (targets.length) {
@@ -4069,7 +4383,7 @@ const controlsHint = document.querySelector('.controls-hint');
 if (controlsHint && !controlsHint.dataset.commandShortcutsAdded) {
     controlsHint.dataset.commandShortcutsAdded = 'true';
     controlsHint.insertAdjacentHTML('beforeend',
-        ' <span>·</span><kbd>F</kbd> Follow <span>·</span><kbd>T</kbd> Attack <span>·</span><kbd>H</kbd> Hold <span>·</span><kbd>G</kbd> Defend <span>·</span><kbd>V</kbd> Advance <span>·</span><kbd>3–5</kbd> New abilities');
+        ' <span>·</span><kbd>F</kbd> Follow <span>·</span><kbd>T</kbd> Attack <span>·</span><kbd>H</kbd> Hold <span>·</span><kbd>G</kbd> Defend <span>·</span><kbd>V</kbd> Advance <span>·</span><kbd>3–6</kbd> Shard powers');
 }
 window.addEventListener('resize', () => engine.resize());
 // The planning menu is also reachable by pressing P while paused.
@@ -4083,6 +4397,8 @@ window.addEventListener('keydown', event => {
 createInteractables();
 createAllPrisonCrystals();
 ensureRegionEncounter('forest', true);
+ensureGuideAndMapUI();
+updateRegionSceneVisibility();
 updateHUD();
 void hasSave().then(found => { $('continue-button').disabled = !found; });
 let previousFrame = performance.now();
@@ -4103,6 +4419,8 @@ engine.runRenderLoop(() => {
         applyEnvironmentalHazards(dt);
         updateBarrierFields(dt);
         updateSummonedAllies(dt);
+        updatePlayerSummoner(dt);
+        updateEnemyProjectiles(dt);
         state.attackCooldown = Math.max(0, state.attackCooldown - dt);
         const repeatAttackRange = playerClass === 'knight' || playerClass === 'warrior' ? 3.8 : 22;
         const repeatAttackCost = playerClass === 'knight' ? 0 :
@@ -4111,12 +4429,12 @@ engine.runRenderLoop(() => {
             state.mana >= repeatAttackCost && nearestEnemy(repeatAttackRange)) {
             attack();
         }
-        for (const id of ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam'])
+        for (const id of ['arcane', 'heal', 'nova', 'barrier', 'antiMagic', 'deathBeam', 'summoner'])
             state.abilityCooldowns[id] = Math.max(0, state.abilityCooldowns[id] - dt);
         if (state.mana < getMaxMana())
             state.mana = Math.min(getMaxMana(), state.mana + dt * 3.2);
         if (state.combatTimer <= 0)
-            state.hp = Math.min(120 + (state.level - 1) * 14, state.hp + dt * 0.45);
+            state.hp = Math.min(getMaxHP(), state.hp + dt * 0.45);
         updateEnemies(dt);
         updateCompanions(dt);
         updateProjectiles(dt);
@@ -4129,7 +4447,7 @@ engine.runRenderLoop(() => {
         state.playerDamageFlash = Math.max(0, state.playerDamageFlash - dt);
         if (state.playerFrozenTimer > 0) player.body.material = materials.ice;
         else if (state.playerDamageFlash > 0) player.body.material = materials.enemyEye;
-        else player.body.material = playerOutfit;
+        else player.body.material = player.pixelClothMaterial || playerOutfit;
         if (now - state.lastSaveTime > 45000) {
             state.lastSaveTime = now;
             void saveGame(true);
