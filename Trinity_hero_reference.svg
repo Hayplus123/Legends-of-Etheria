@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1365" viewBox="0 0 2048 1365">
+<defs>
+  <radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop stop-color="#294457"/><stop offset=".55" stop-color="#122337"/><stop offset="1" stop-color="#070d18"/></radialGradient>
+  <linearGradient id="steel" x2="1" y2="1"><stop stop-color="#effaff"/><stop offset=".25" stop-color="#91b5c8"/><stop offset=".58" stop-color="#344f69"/><stop offset="1" stop-color="#d4e4e5"/></linearGradient>
+  <linearGradient id="blue" x2="1" y2="1"><stop stop-color="#4b78a7"/><stop offset=".5" stop-color="#17365e"/><stop offset="1" stop-color="#08172e"/></linearGradient>
+  <linearGradient id="gold" x2=".8" y2="1"><stop stop-color="#fff3c5"/><stop offset=".4" stop-color="#d9ab55"/><stop offset="1" stop-color="#80501f"/></linearGradient>
+  <linearGradient id="skin" x2="1" y2="1"><stop stop-color="#ffe2c5"/><stop offset=".55" stop-color="#cc9677"/><stop offset="1" stop-color="#7b5148"/></linearGradient>
+  <linearGradient id="green" x2="1" y2="1"><stop stop-color="#89ae68"/><stop offset=".45" stop-color="#315b3e"/><stop offset="1" stop-color="#102c28"/></linearGradient>
+  <linearGradient id="hair" x2="1" y2="1"><stop stop-color="#987154"/><stop offset=".4" stop-color="#46302a"/><stop offset="1" stop-color="#171a20"/></linearGradient>
+  <linearGradient id="ivory" x2="1" y2="1"><stop stop-color="#fffef4"/><stop offset=".55" stop-color="#dce7df"/><stop offset="1" stop-color="#8da7a9"/></linearGradient>
+  <linearGradient id="teal" x2="1" y2="1"><stop stop-color="#82e0d6"/><stop offset=".5" stop-color="#197f87"/><stop offset="1" stop-color="#063c50"/></linearGradient>
+  <linearGradient id="gem" x2=".8" y2="1"><stop stop-color="#f5ffff"/><stop offset=".3" stop-color="#72edff"/><stop offset=".7" stop-color="#2586d4"/><stop offset="1" stop-color="#17346b"/></linearGradient>
+  <filter id="soft"><feGaussianBlur stdDeviation="18"/></filter>
+  <filter id="shadow"><feGaussianBlur stdDeviation="12"/></filter>
+</defs>
+<rect width="2048" height="1365" fill="url(#bg)"/>
+<path d="M0 1120Q500 1060 1024 1125T2048 1110V1365H0Z" fill="#101b26"/>
+<path d="M0 1190Q500 1150 1024 1195T2048 1175" fill="none" stroke="#7899a8" stroke-opacity=".38" stroke-width="3"/>
+<g fill="#b8eaff" opacity=".6"><circle cx="140" cy="155" r="3"/><circle cx="650" cy="210" r="2"/><circle cx="790" cy="100" r="3"/><circle cx="1260" cy="165" r="2"/><circle cx="1850" cy="170" r="3"/><circle cx="1960" cy="390" r="2"/><circle cx="1040" cy="300" r="2"/></g>
+<text x="1024" y="72" fill="#f0e4c2" font-family="Georgia,serif" font-size="38" text-anchor="middle" letter-spacing="9">LEGENDS OF ETHERIA</text>
+<text x="1024" y="108" fill="#9cb6c3" font-family="Arial,sans-serif" font-size="15" text-anchor="middle" letter-spacing="5">COMPANION DESIGN REFERENCE</text>
+
+<!-- REAPHEL: KNIGHT -->
+<g id="reaphel" transform="translate(55 125)">
+  <ellipse cx="300" cy="1060" rx="238" ry="30" fill="#000" opacity=".55" filter="url(#shadow)"/>
+  <path d="M205 345Q100 480 102 850L210 1065 410 1090 505 820Q470 540 410 365Z" fill="url(#blue)" stroke="#bc9148" stroke-width="9"/>
+  <path d="M210 390Q165 650 205 1015M410 405Q465 690 425 1020" fill="none" stroke="#80a8c9" stroke-opacity=".6" stroke-width="9"/>
+  <path d="M210 745L185 955 145 1040Q170 1080 260 1065L292 1005 290 770Z" fill="#202b39" stroke="#8c704a" stroke-width="7"/>
+  <path d="M315 750L330 965 305 1045Q350 1080 445 1055L430 1005 410 760Z" fill="#182437" stroke="#8c704a" stroke-width="7"/>
+  <path d="M175 915L275 920 260 1015 155 1020ZM325 915L430 905 447 1010 330 1020Z" fill="url(#steel)" stroke="url(#gold)" stroke-width="8"/>
+  <path d="M140 1037Q185 1015 260 1045L275 1082 130 1090ZM305 1045Q370 1015 455 1035L480 1080 300 1090Z" fill="#182537" stroke="url(#gold)" stroke-width="8"/>
+  <path d="M190 345Q235 295 300 300Q375 295 425 345L455 610Q390 675 300 665Q210 665 160 610Z" fill="url(#blue)" stroke="url(#gold)" stroke-width="12"/>
+  <path d="M215 365L300 390 385 365 415 575Q300 640 190 575Z" fill="url(#steel)" stroke="#e3c16f" stroke-width="9"/>
+  <path d="M300 390V610M216 460Q300 500 384 460" fill="none" stroke="#263f5b" stroke-width="12"/>
+  <path d="M300 420L323 454 300 493 277 454Z" fill="url(#gold)" stroke="#fff0bd" stroke-width="4"/>
+  <path d="M300 431L310 454 300 474 290 454Z" fill="url(#gem)"/>
+  <path d="M270 265H330L340 330 300 365 260 330Z" fill="url(#skin)"/>
+  <path d="M245 150Q300 115 355 150L360 240Q340 310 300 318Q255 300 240 240Z" fill="url(#skin)" stroke="#4b3433" stroke-width="5"/>
+  <path d="M235 180Q220 85 300 65Q390 75 370 185Q350 145 325 130Q290 160 235 180Z" fill="url(#hair)"/>
+  <path d="M240 145Q250 205 270 218M300 125Q280 170 285 210M350 130Q365 175 345 220" fill="none" stroke="#c19a75" stroke-width="9" stroke-linecap="round"/>
+  <path d="M260 215Q278 205 292 215M315 215Q332 205 345 215" stroke="#29262a" stroke-width="7" fill="none"/>
+  <path d="M286 260Q300 270 316 260" stroke="#754a45" stroke-width="5" fill="none"/>
+  <path d="M165 335Q105 320 95 405L135 472 205 445 230 370ZM395 335Q475 315 495 400L460 478 390 445 375 370Z" fill="url(#steel)" stroke="url(#gold)" stroke-width="11"/>
+  <path d="M125 455L95 650 145 690 210 480ZM455 455L505 650 455 700 390 480Z" fill="url(#blue)" stroke="url(#gold)" stroke-width="10"/>
+  <path d="M175 650Q300 690 430 650L440 710Q300 750 165 710Z" fill="#192d43" stroke="url(#gold)" stroke-width="10"/>
+  <path d="M275 665L300 640 325 665V705L300 725 275 705Z" fill="url(#gold)"/><path d="M300 665L314 682 300 704 286 682Z" fill="url(#gem)"/>
+  <path d="M65 500Q125 455 205 500L195 770Q140 860 80 770Z" fill="url(#blue)" stroke="url(#gold)" stroke-width="14"/>
+  <path d="M88 525Q140 500 182 525L175 750Q140 800 105 750Z" fill="none" stroke="#b5d0d7" stroke-width="6"/>
+  <path d="M140 565L165 620 205 628 174 667 182 716 140 692 98 716 106 667 75 628 115 620Z" fill="url(#gold)" stroke="#fff0b4" stroke-width="5"/>
+  <circle cx="140" cy="646" r="24" fill="url(#gem)" stroke="#fff0bd" stroke-width="5"/>
+  <path d="M440 600L485 565 650 1050 610 1080Z" fill="url(#steel)" stroke="#d8e7e8" stroke-width="6"/>
+  <path d="M461 590L476 580 625 1035" stroke="#fff" stroke-width="7" opacity=".85" fill="none"/>
+  <path d="M410 600L505 560 525 592 430 632Z" fill="url(#gold)" stroke="#fff0b4" stroke-width="5"/>
+  <path d="M438 625L470 611 455 690 425 700Z" fill="#25354a" stroke="url(#gold)" stroke-width="6"/>
+</g>
+
+<!-- SYLVA: ELVEN RANGER -->
+<g id="sylva" transform="translate(680 125)">
+  <ellipse cx="320" cy="1060" rx="235" ry="30" fill="#000" opacity=".55" filter="url(#shadow)"/>
+  <path d="M205 340Q105 500 155 850L235 1080 410 1085 505 860Q500 525 410 355Z" fill="url(#green)" stroke="#c09a4e" stroke-width="9"/>
+  <path d="M220 430Q170 700 245 1025M405 425Q470 700 420 1020" stroke="#8eb16a" stroke-width="8" fill="none" opacity=".65"/>
+  <path d="M230 730L210 960 180 1045 280 1080 305 1010 305 740ZM325 740L335 1000 320 1050 430 1080 460 1030 405 740Z" fill="#292a28" stroke="#8a6942" stroke-width="7"/>
+  <path d="M185 1025L285 1035 295 1080 160 1090ZM320 1035L440 1020 475 1080 310 1090Z" fill="#263b31" stroke="url(#gold)" stroke-width="7"/>
+  <path d="M230 165L165 135 230 220ZM390 165L455 135 392 220Z" fill="url(#skin)" stroke="#b98d6b" stroke-width="5"/>
+  <path d="M250 140Q315 100 375 145L378 240Q350 315 310 315Q260 290 242 240Z" fill="url(#skin)" stroke="#62433a" stroke-width="5"/>
+  <path d="M225 165Q205 70 305 55Q410 65 395 175Q370 120 345 110Q290 170 225 165Z" fill="url(#hair)"/>
+  <path d="M240 120Q205 230 250 370L220 520Q170 330 190 180ZM365 115Q430 225 395 390L430 515Q480 330 435 175Z" fill="url(#hair)"/>
+  <path d="M250 205Q270 195 285 205M330 205Q350 195 366 205" stroke="#2d2928" stroke-width="6" fill="none"/>
+  <path d="M295 260Q310 270 325 258" stroke="#774b43" stroke-width="5" fill="none"/>
+  <path d="M210 345Q250 300 315 310Q380 300 425 345L450 610Q330 690 190 610Z" fill="url(#green)" stroke="url(#gold)" stroke-width="10"/>
+  <path d="M235 370L310 405 390 365 420 585Q310 655 215 585Z" fill="#315b3f" stroke="#9f9b55" stroke-width="6"/>
+  <path d="M310 405V625M255 485Q310 515 365 485" stroke="#c4a45d" stroke-width="7" fill="none"/>
+  <path d="M310 440L335 465 310 495 285 465Z" fill="#75ad69" stroke="url(#gold)" stroke-width="5"/>
+  <g fill="#527e49" stroke="#c5a45b" stroke-width="4"><path d="M215 350Q160 295 145 250Q205 260 242 320Z"/><path d="M245 340Q215 270 230 225Q285 270 275 340Z"/><path d="M390 340Q440 275 470 245Q470 315 415 365Z"/></g>
+  <g stroke="#b3c27a" stroke-width="4" fill="none"><path d="M160 268Q195 300 225 340M238 244Q250 290 265 330M458 260Q430 302 405 345"/></g>
+  <path d="M170 330L125 580 190 610 235 370Z" fill="#4c3428" stroke="url(#gold)" stroke-width="7"/>
+  <path d="M145 350L125 180M170 360V165M195 370L215 185" stroke="#d9c18b" stroke-width="7" fill="none"/>
+  <g fill="url(#gold)"><path d="M115 190L125 145 135 190Z"/><path d="M160 175L170 130 180 175Z"/><path d="M205 195L215 150 225 195Z"/></g>
+  <path d="M495 410Q605 560 560 735Q530 900 455 1015" fill="none" stroke="#a77a3e" stroke-width="23" stroke-linecap="round"/>
+  <path d="M495 410Q605 560 560 735Q530 900 455 1015" fill="none" stroke="#e5c878" stroke-width="5" stroke-linecap="round"/>
+  <path d="M495 410L455 1015" stroke="#f2e2b2" stroke-width="3" fill="none"/>
+  <path d="M505 525Q535 550 565 585M525 780Q500 830 480 870" stroke="#6fb56c" stroke-width="10" fill="none"/>
+  <path d="M200 635Q310 680 430 630L440 690Q310 735 190 690Z" fill="#243c2c" stroke="url(#gold)" stroke-width="9"/>
+  <path d="M285 655L310 635 335 655V695L310 715 285 695Z" fill="url(#gold)"/>
+</g>
+
+<!-- AURELIA: HEALER -->
+<g id="aurelia" transform="translate(1350 125)">
+  <ellipse cx="300" cy="1060" rx="245" ry="30" fill="#000" opacity=".55" filter="url(#shadow)"/>
+  <path d="M205 340Q135 470 110 820L135 1085H480L505 820Q470 470 405 340Z" fill="url(#ivory)" stroke="url(#gold)" stroke-width="10"/>
+  <path d="M205 410Q165 710 180 1035L250 1050 285 480Z" fill="#f7f3df"/>
+  <path d="M405 410Q455 710 445 1035L370 1050 325 480Z" fill="url(#teal)"/>
+  <path d="M285 430Q310 480 330 430L375 1040H240Z" fill="url(#gold)" stroke="#fff0be" stroke-width="5"/>
+  <path d="M305 490L320 540 306 610 290 540Z" fill="url(#gem)" stroke="#fff" stroke-width="4"/>
+  <path d="M190 350Q235 285 300 300Q370 290 420 350L440 470Q365 510 300 465Q230 510 170 465Z" fill="url(#ivory)" stroke="url(#gold)" stroke-width="11"/>
+  <path d="M200 365Q245 420 300 425Q360 420 410 365" fill="none" stroke="#cda34f" stroke-width="8"/>
+  <path d="M300 335L330 375 300 415 270 375Z" fill="url(#gold)"/><path d="M300 350L316 375 300 400 284 375Z" fill="url(#gem)"/>
+  <path d="M255 155Q300 110 360 150L365 240Q345 310 305 315Q260 300 240 240Z" fill="url(#skin)" stroke="#8d6654" stroke-width="5"/>
+  <path d="M235 175Q210 65 310 55Q405 75 385 190Q365 125 340 110Q290 145 235 175Z" fill="#e6c17b" stroke="#fff0bb" stroke-width="6"/>
+  <path d="M245 145Q205 290 230 520L190 650Q155 365 195 185ZM365 145Q425 290 395 520L445 650Q470 365 415 185Z" fill="#d8ae6c"/>
+  <path d="M260 205Q280 195 295 205M325 205Q345 195 360 205" stroke="#453633" stroke-width="6" fill="none"/>
+  <path d="M292 260Q307 271 323 260" stroke="#a36b5a" stroke-width="5" fill="none"/>
+  <path d="M245 150Q305 92 375 150" stroke="url(#gold)" stroke-width="13" fill="none"/>
+  <path d="M300 110L315 88 330 110 315 130Z" fill="url(#gem)" stroke="#fff4ce" stroke-width="4"/>
+  <path d="M190 365Q140 395 120 560L185 620 245 435ZM410 365Q460 395 480 560L415 620 355 435Z" fill="url(#ivory)" stroke="url(#gold)" stroke-width="9"/>
+  <path d="M120 555L190 600 165 685 95 650ZM480 555L410 600 435 685 505 650Z" fill="url(#teal)" stroke="url(#gold)" stroke-width="8"/>
+  <path d="M145 670Q165 650 190 675L205 720Q180 745 150 720Z" fill="url(#skin)"/>
+  <circle cx="185" cy="645" r="72" fill="#73f4d0" opacity=".15" filter="url(#soft)"/>
+  <circle cx="185" cy="645" r="34" fill="url(#gem)" stroke="#e8fff6" stroke-width="6"/>
+  <path d="M185 592L198 632 238 645 198 659 185 700 172 659 132 645 172 632Z" fill="none" stroke="#a4ffe9" stroke-width="5"/>
+  <path d="M520 195V1095" stroke="#9d7136" stroke-width="24" stroke-linecap="round"/>
+  <path d="M515 210V1080" stroke="#f3d17d" stroke-width="7" stroke-linecap="round"/>
+  <path d="M485 245Q440 175 520 100Q600 175 555 245L520 280Z" fill="url(#gold)" stroke="#fff0c0" stroke-width="8"/>
+  <path d="M520 115L560 180 520 250 480 180Z" fill="url(#gem)" stroke="#d8ffff" stroke-width="8"/>
+  <path d="M490 330Q520 290 550 330M490 900Q520 940 550 900" fill="none" stroke="url(#gold)" stroke-width="13"/>
+  <g fill="none" stroke="url(#gold)" stroke-width="7"><path d="M215 720Q250 760 260 825Q270 900 250 985"/><path d="M395 720Q360 760 350 825Q340 900 360 985"/><path d="M300 745L325 795 300 840 275 795Z"/><path d="M300 865L325 915 300 965 275 915Z"/></g>
+  <path d="M140 1080Q300 1115 480 1080" fill="none" stroke="#c2a05c" stroke-width="11"/>
+</g>
+
+<g font-family="Georgia,serif" text-anchor="middle">
+  <text x="355" y="1290" fill="#f0dfb2" font-size="34" letter-spacing="5">REAPHEL</text>
+  <text x="355" y="1322" fill="#9ab4c5" font-family="Arial,sans-serif" font-size="15" letter-spacing="4">KNIGHT · FRONTLINE DEFENDER</text>
+  <text x="1000" y="1290" fill="#d8dfb0" font-size="34" letter-spacing="5">SYLVA</text>
+  <text x="1000" y="1322" fill="#9abf91" font-family="Arial,sans-serif" font-size="15" letter-spacing="4">RANGER · RANGED SPECIALIST</text>
+  <text x="1650" y="1290" fill="#f4e8c5" font-size="34" letter-spacing="5">AURELIA</text>
+  <text x="1650" y="1322" fill="#9dd9dc" font-family="Arial,sans-serif" font-size="15" letter-spacing="4">HEALER · SUPPORT SPECIALIST</text>
+</g>
+</svg>
